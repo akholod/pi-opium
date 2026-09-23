@@ -74,7 +74,7 @@ report with Council Response, Per-Councillor Details and Council Summary.
 ## Layout
 
 ```
-extensions/crew.ts   before_agent_start section, /orchestrator, /council, council tool
+extensions/opium.ts  before_agent_start section, /orchestrator, /council, council tool
 src/prompt.ts        orchestrator prompt builder
 src/council.ts       parallel councillors + synthesis over the delegation contract
 src/delegation.ts    local copy of the pi-subagents delegation contract
