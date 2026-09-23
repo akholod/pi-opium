@@ -1,6 +1,6 @@
-// pi-crew: oh-my-opencode-slim daily workflow for pi.
+// pi-opium: oh-my-opencode-slim daily workflow for pi.
 //   - orchestrator system prompt section on every turn (toggle with
-//     /orchestrator on|off|status; persisted in ~/.pi/agent/crew.json)
+//     /orchestrator on|off|status; persisted in ~/.pi/agent/opium.json)
 //   - /council <question> and the `council` tool: three councillors on
 //     different models in parallel, then a synthesized report
 // Specialist agents live in ~/.pi/agent/agents/*.md (pi-subagents).
@@ -35,7 +35,7 @@ const renderCouncil = (result: CouncilResult): string => {
   return lines.join('\n');
 };
 
-export default function crewExtension(pi: ExtensionAPI) {
+export default function opiumExtension(pi: ExtensionAPI) {
   const path = statePath(CONFIG_DIR_NAME);
   let state = readState(path);
   const prompt = buildOrchestratorPrompt();
@@ -47,7 +47,7 @@ export default function crewExtension(pi: ExtensionAPI) {
 
   pi.registerCommand('orchestrator', {
     description:
-      'Toggle the crew orchestrator prompt: /orchestrator on | off | status',
+      'Toggle the opium orchestrator prompt: /orchestrator on | off | status',
     handler: async (args, ctx) => {
       const word = args.trim().toLowerCase();
       if (word === 'on' || word === 'off') {
@@ -58,7 +58,7 @@ export default function crewExtension(pi: ExtensionAPI) {
         return;
       }
       ctx.ui.notify(
-        `[crew] orchestrator prompt is ${state.orchestrator ? 'ON' : 'OFF'} (${path})`,
+        `[opium] orchestrator prompt is ${state.orchestrator ? 'ON' : 'OFF'} (${path})`,
         'info',
       );
     },
@@ -83,7 +83,7 @@ export default function crewExtension(pi: ExtensionAPI) {
       });
       pi.sendMessage(
         {
-          customType: 'crew-council',
+          customType: 'opium-council',
           content: renderCouncil(result),
           display: true,
           details: { outcome: result.outcome, question },

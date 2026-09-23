@@ -37,7 +37,7 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
 });
 
 test('state round-trips and defaults to on', () => {
-  const path = join(mkdtempSync(join(tmpdir(), 'crew-')), 'crew.json');
+  const path = join(mkdtempSync(join(tmpdir(), 'opium-')), 'opium.json');
   assert.deepEqual(readState(path), DEFAULT_STATE);
   writeState(path, { orchestrator: false });
   assert.deepEqual(readState(path), { orchestrator: false });

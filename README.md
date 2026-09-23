@@ -1,4 +1,4 @@
-# pi-crew
+# pi-opium
 
 Daily-work orchestration for [pi](https://github.com/badlogic/pi-mono), ported
 from [oh-my-opencode-slim](https://github.com/alvinunreal/oh-my-opencode-slim):
@@ -17,7 +17,7 @@ package does not mention them, you call them yourself.
 ## Install
 
 ```bash
-pi install /home/andrii/pi_sandbox/crew   # extension + agents + simplify skill
+pi install /home/andrii/pi_sandbox/opium   # extension + agents + simplify skill
 /reload
 /subagents                                 # roster should list the agents below
 /model openai-codex/gpt-6-sol              # the orchestrator model (main session)
@@ -31,7 +31,7 @@ delegation thresholds, parallelization, background-run discipline in
 pi-subagents terms (`subagent({ agent, task })`, `status`, `steer`,
 `resume`, `stop`), design handoff rules and the communication style.
 `/orchestrator on | off | status` toggles it; the state persists in
-`~/.pi/agent/crew.json` (default on).
+`~/.pi/agent/opium.json` (default on).
 
 **Agents** (`agents/*.md`, user scope overrides them):
 

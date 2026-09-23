@@ -1,5 +1,5 @@
 // Persistent on/off switch for the orchestrator prompt:
-// `~/.pi/agent/crew.json` -> { "orchestrator": true }. Default on.
+// `~/.pi/agent/opium.json` -> { "orchestrator": true }. Default on.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -12,7 +12,7 @@ export interface CrewState {
 export const DEFAULT_STATE: CrewState = { orchestrator: true };
 
 export const statePath = (configDirName: string, homeDir = homedir()): string =>
-  join(homeDir, configDirName, 'agent', 'crew.json');
+  join(homeDir, configDirName, 'agent', 'opium.json');
 
 export const readState = (path: string): CrewState => {
   if (!existsSync(path)) return DEFAULT_STATE;
