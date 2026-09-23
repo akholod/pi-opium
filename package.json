@@ -1,0 +1,51 @@
+{
+  "name": "pi-crew",
+  "version": "0.1.0",
+  "description": "Pi extension: oh-my-opencode-slim style orchestrator prompt and multi-model council on top of pi-subagents",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "orchestrator",
+    "council"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "subagents": {
+      "agents": [
+        "./agents"
+      ]
+    }
+  },
+  "files": [
+    "extensions",
+    "src",
+    "agents",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "lint": "prettier --check \"**/*.ts\"",
+    "fix": "prettier --write \"**/*.ts\"",
+    "dev": "pi -e ."
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.87.0",
+    "@types/node": "^24.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0"
+  }
+}
