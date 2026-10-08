@@ -39,9 +39,12 @@ export default function opiumExtension(pi: ExtensionAPI) {
   const path = statePath(CONFIG_DIR_NAME);
   let state = readState(path);
   const prompt = buildOrchestratorPrompt();
+  // Background pi-subagents children load ambient extensions too; a
+  // specialist must not be told to orchestrate and delegate.
+  const isSubagentChild = process.env.PI_SUBAGENT_CHILD === '1';
 
   pi.on('before_agent_start', (event) => {
-    if (!state.orchestrator) return;
+    if (isSubagentChild || !state.orchestrator) return;
     event.systemPromptOptions.sections[SECTION] = prompt;
   });
 
