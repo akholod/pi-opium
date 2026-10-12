@@ -107,6 +107,8 @@ interface Entry {
   handle?: AgentHandle;
   turn: TurnOptions;
   cancelRequested: boolean;
+  // settles when the current generation is terminal
+  settled?: Promise<unknown>;
 }
 
 const isActive = (run: RunRecord): boolean =>
@@ -179,6 +181,7 @@ export class RunRegistry {
       transcriptPath: run.transcriptPath,
       cwd: run.cwd,
     });
+    entry.settled = done.catch(() => undefined);
     return { run, done };
   }
 
@@ -241,6 +244,8 @@ export class RunRegistry {
     if (!isActive(entry.run)) return 'not_running';
     entry.cancelRequested = true;
     if (entry.handle) await entry.handle.abort();
+    // resolve only once the record is terminal, so a revive can follow
+    await entry.settled;
     return 'cancelled';
   }
 
@@ -267,17 +272,18 @@ export class RunRegistry {
     entry.cancelRequested = false;
     this.persist(run);
     if (live) {
-      return { run, done: this.drive(entry, live, run.task) };
+      const done = this.drive(entry, live, run.task);
+      entry.settled = done.catch(() => undefined);
+      return { run, done };
     }
     entry.handle = undefined;
     run.retained = false;
-    return {
-      run,
-      done: this.launch(entry, def, run.task, {
-        resumeFrom: run.transcriptPath,
-        cwd: run.cwd,
-      }),
-    };
+    const done = this.launch(entry, def, run.task, {
+      resumeFrom: run.transcriptPath,
+      cwd: run.cwd,
+    });
+    entry.settled = done.catch(() => undefined);
+    return { run, done };
   }
 
   async shutdown(): Promise<void> {

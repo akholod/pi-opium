@@ -20,7 +20,7 @@ import { humanWaitTracker } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import { readState, statePath, writeState } from '../src/state.ts';
 import { readAgentOverrides } from '../src/agents.ts';
-import { RunRegistry, defaultStarter } from '../src/runs.ts';
+import { RunRegistry, defaultStarter, type Starter } from '../src/runs.ts';
 import { createDelivery, type Delivery } from '../src/delivery.ts';
 import {
   defaultAgentNames,
@@ -56,7 +56,14 @@ const renderCouncil = (result: CouncilResult): string => {
   return lines.join('\n');
 };
 
-export default function opiumExtension(pi: ExtensionAPI) {
+export interface OpiumDeps {
+  // runs an agent; defaults to pi-agent-runner's startAgent
+  starter?: Starter;
+  // run metadata and transcripts; defaults to ~/.pi/agent/opium/runs
+  runsDir?: string;
+}
+
+export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   const path = statePath(CONFIG_DIR_NAME);
   // watch permission dialogs from the start so a run never misses one
   humanWaitTracker(pi.events);
@@ -80,16 +87,20 @@ export default function opiumExtension(pi: ExtensionAPI) {
     // delivered into the next one
     const sink: { delivery?: Delivery } = {};
     const created: RunRegistry = new RunRegistry({
+      runsDir: deps.runsDir,
       start: (def, options) =>
-        defaultStarter({
-          parent: {
-            events: pi.events,
-            get ctx() {
-              return latestCtx ?? ctx;
+        (
+          deps.starter ??
+          defaultStarter({
+            parent: {
+              events: pi.events,
+              get ctx() {
+                return latestCtx ?? ctx;
+              },
             },
-          },
-          cwd: ctx.cwd,
-        })(def, options),
+            cwd: ctx.cwd,
+          })
+        )(def, options),
       onTerminal: (run) => sink.delivery?.deliver(run),
     });
     sink.delivery = createDelivery({
@@ -239,4 +250,8 @@ export default function opiumExtension(pi: ExtensionAPI) {
       };
     },
   });
+};
+
+export default function opiumExtension(pi: ExtensionAPI) {
+  createOpium(pi);
 }
