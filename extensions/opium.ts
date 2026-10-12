@@ -38,6 +38,7 @@ import {
   registerAgentTools,
 } from '../src/tools.ts';
 import { boardFingerprint, formatBoard } from '../src/board.ts';
+import { injectReminders } from '../src/reminders.ts';
 import { createWake, type Wake } from '../src/wake.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
@@ -223,6 +224,12 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
         display: false,
       },
     };
+  });
+
+  // request-local: reminders are never persisted into the session
+  pi.on('context', (event) => {
+    if (isSubagentChild || !state.orchestrator) return {};
+    return { messages: injectReminders(event.messages) };
   });
 
   pi.registerTool({
