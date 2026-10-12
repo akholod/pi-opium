@@ -19,6 +19,7 @@ import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import { readState, statePath, writeState } from '../src/state.ts';
 import { readAgentOverrides } from '../src/agents.ts';
 import { RunRegistry, defaultStarter } from '../src/runs.ts';
+import { createDelivery, type Delivery } from '../src/delivery.ts';
 import {
   defaultAgentNames,
   defaultLoadDef,
@@ -66,10 +67,15 @@ export default function opiumExtension(pi: ExtensionAPI) {
   // One run registry per parent session, created on first tool use. Its
   // starter reads the latest context so new runs use the current model.
   let registry: RunRegistry | undefined;
+  let delivery: Delivery | undefined;
   let latestCtx: ExtensionContext | undefined;
   const getRegistry = (ctx: ExtensionContext): RunRegistry => {
     latestCtx = ctx;
-    registry ??= new RunRegistry({
+    if (registry) return registry;
+    // bound to this registry, so a late run of a replaced session is never
+    // delivered into the next one
+    const sink: { delivery?: Delivery } = {};
+    const created: RunRegistry = new RunRegistry({
       start: (def, options) =>
         defaultStarter({
           parent: {
@@ -80,9 +86,15 @@ export default function opiumExtension(pi: ExtensionAPI) {
           },
           cwd: ctx.cwd,
         })(def, options),
-      onTerminal: () => {},
+      onTerminal: (run) => sink.delivery?.deliver(run),
     });
-    return registry;
+    sink.delivery = createDelivery({
+      send: (message, options) => pi.sendMessage(message, options),
+      markRead: (id) => created.markRead(id),
+    });
+    delivery = sink.delivery;
+    registry = created;
+    return created;
   };
   pi.on('session_start', (_event, ctx) => {
     latestCtx = ctx;
@@ -91,6 +103,9 @@ export default function opiumExtension(pi: ExtensionAPI) {
     const current = registry;
     registry = undefined;
     latestCtx = undefined;
+    // stop first so runs cancelled by the shutdown are never delivered
+    delivery?.stop();
+    delivery = undefined;
     await current?.shutdown();
   });
   registerAgentTools(pi, (ctx) => ({
