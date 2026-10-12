@@ -4,8 +4,6 @@ description: Read-only council seat "alpha" (openai-codex/gpt-6-luna). Independe
 model: openai-codex/gpt-6-luna
 thinking: high
 tools: read, grep, find, ls
-acceptanceRole: read-only
-defaultContext: fresh
 timeoutMs: 900000
 ---
 

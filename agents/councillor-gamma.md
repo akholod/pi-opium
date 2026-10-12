@@ -4,8 +4,6 @@ description: Read-only council seat "gamma" (opencode-go/glm-5.3). Independent a
 model: opencode-go/glm-5.3
 thinking: high
 tools: read, grep, find, ls
-acceptanceRole: read-only
-defaultContext: fresh
 timeoutMs: 900000
 ---
 

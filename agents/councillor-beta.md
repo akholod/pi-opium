@@ -4,8 +4,6 @@ description: Read-only council seat "beta" (opencode-go/deepseek-v4-pro). Indepe
 model: opencode-go/deepseek-v4-pro
 thinking: high
 tools: read, grep, find, ls
-acceptanceRole: read-only
-defaultContext: fresh
 timeoutMs: 900000
 ---
 

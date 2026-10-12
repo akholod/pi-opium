@@ -40,7 +40,23 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
   ]) {
     assert.ok(full.includes(`\n${name}`), name);
   }
-  assert.match(full, /subagent\(\{ agent: "<name>"/);
+  assert.match(full, /`agent\(\{ agent: "<name>"/);
+  for (const tool of [
+    'agent_status',
+    'agent_result',
+    'agent_message',
+    'agent_cancel',
+    'agent_revive',
+  ]) {
+    assert.ok(full.includes(`\`${tool}(`), tool);
+  }
+  // no pi-subagents vocabulary is left; its tools are only named as off
+  // limits
+  assert.ok(!full.includes('subagent('));
+  assert.ok(!full.includes('pi-subagents'));
+  assert.match(full, /do not call or enable them/);
+  assert.ok(!full.includes('bg_wait'));
+  assert.ok(!full.includes('fork'));
   assert.ok(!full.includes('ralplan'));
   assert.ok(!full.includes('ralph'));
   const trimmed = buildOrchestratorPrompt({
@@ -49,6 +65,13 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
   assert.ok(!trimmed.includes('\ndesigner\n'));
   assert.ok(!trimmed.includes('observer + explorer'));
   assert.ok(trimmed.includes('multiple fixer instances'));
+  // only callable agents are listed; council is a tool and always stays
+  const available = buildOrchestratorPrompt({
+    available: ['explorer', 'fixer'],
+  });
+  assert.ok(available.includes('\nexplorer\n'));
+  assert.ok(!available.includes('\noracle\n'));
+  assert.ok(available.includes('\ncouncil (via'));
 });
 
 test('state round-trips and defaults to on', () => {

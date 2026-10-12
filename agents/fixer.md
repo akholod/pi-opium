@@ -6,10 +6,8 @@ model: openai-codex/gpt-6-luna
 thinking: medium
 tools: read, grep, find, ls, bash, edit, write, mcp:codegraph
 skills: pnpm, node
-inheritProjectContext: true
-async: true
-acceptanceRole: writer
-defaultContext: fresh
+contextFiles: true
+background: true
 timeoutMs: 1800000
 ---
 

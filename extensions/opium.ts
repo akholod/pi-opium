@@ -1,10 +1,12 @@
 // pi-opium: oh-my-opencode-slim daily workflow for pi.
 //   - orchestrator system prompt section on every turn (toggle with
 //     /orchestrator on|off|status; persisted in ~/.pi/agent/opium.json)
+//   - agent, agent_status, agent_result, agent_message, agent_cancel,
+//     agent_revive: specialist agents (agents/*.md, overridable in
+//     ~/.pi/agent/agents/) run in-process through pi-agent-runner;
+//     background results are delivered back to this session
 //   - /council <question> and the `council` tool: three councillors on
 //     different models in parallel, then a synthesized report
-// Specialist agents live in ~/.pi/agent/agents/*.md (pi-subagents);
-// the council runs in-process through pi-agent-runner.
 
 import { join } from 'node:path';
 import { Type } from 'typebox';
@@ -59,9 +61,11 @@ export default function opiumExtension(pi: ExtensionAPI) {
   // watch permission dialogs from the start so a run never misses one
   humanWaitTracker(pi.events);
   let state = readState(path);
-  const prompt = buildOrchestratorPrompt();
-  // Background pi-subagents children load ambient extensions too; a
-  // specialist must not be told to orchestrate and delegate.
+  // the roster names only agents the `agent` tool can call
+  const prompt = buildOrchestratorPrompt({ available: defaultAgentNames() });
+  // pi-agent-runner never loads Opium into its children. pi-subagents, if
+  // installed alongside, does; its children must not be told to
+  // orchestrate and delegate.
   const isSubagentChild = process.env.PI_SUBAGENT_CHILD === '1';
 
   // One run registry per parent session, created on first tool use. Its

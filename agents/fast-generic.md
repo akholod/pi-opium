@@ -5,10 +5,9 @@ advertise: true
 model: openai-codex/gpt-6-luna
 thinking: low
 tools: read, grep, find, ls, bash
-inheritProjectContext: true
-async: true
+contextFiles: true
+background: true
 gitGuard: false
-defaultContext: fresh
 timeoutMs: 900000
 ---
 

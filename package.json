@@ -1,7 +1,7 @@
 {
   "name": "pi-opium",
   "version": "0.1.1",
-  "description": "Pi extension: oh-my-opencode-slim style orchestrator prompt and multi-model council on top of pi-subagents",
+  "description": "Pi extension: oh-my-opencode-slim style orchestrator with its own background specialist agents and a multi-model council, on pi-agent-runner",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -17,12 +17,7 @@
     ],
     "skills": [
       "./skills"
-    ],
-    "subagents": {
-      "agents": [
-        "./agents"
-      ]
-    }
+    ]
   },
   "files": [
     "extensions",

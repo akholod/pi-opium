@@ -5,9 +5,7 @@ advertise: true
 model: openai-codex/gpt-6-luna
 thinking: low
 tools: read, grep, find, ls, mcp:codegraph
-async: true
-acceptanceRole: read-only
-defaultContext: fresh
+background: true
 timeoutMs: 600000
 ---
 

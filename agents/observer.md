@@ -5,8 +5,6 @@ advertise: true
 model: openai-codex/gpt-6-luna
 thinking: low
 tools: read
-acceptanceRole: read-only
-defaultContext: fresh
 timeoutMs: 600000
 ---
 

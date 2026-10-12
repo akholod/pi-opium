@@ -4,7 +4,6 @@ description: Multi-model consensus synthesizer. Receives raw councillor response
 model: opencode-go/kimi-k3
 thinking: high
 tools:
-defaultContext: fresh
 timeoutMs: 900000
 ---
 

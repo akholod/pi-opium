@@ -6,10 +6,8 @@ model: openai-codex/gpt-6-astra
 thinking: xhigh
 tools: read, grep, find, ls, mcp:codegraph
 skills: simplify
-inheritProjectContext: true
-async: true
-acceptanceRole: read-only
-defaultContext: fork
+contextFiles: true
+background: true
 timeoutMs: 1200000
 ---
 

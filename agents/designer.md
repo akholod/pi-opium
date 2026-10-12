@@ -5,10 +5,8 @@ advertise: true
 model: opencode-go/kimi-k2.7-code
 thinking: medium
 skills: make-interfaces-feel-better
-inheritProjectContext: true
-async: true
-acceptanceRole: writer
-defaultContext: fresh
+contextFiles: true
+background: true
 timeoutMs: 1800000
 ---
 
