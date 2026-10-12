@@ -12,11 +12,18 @@ import {
   CONFIG_DIR_NAME,
   getAgentDir,
   type ExtensionAPI,
+  type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { humanWaitTracker } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import { readState, statePath, writeState } from '../src/state.ts';
 import { readAgentOverrides } from '../src/agents.ts';
+import { RunRegistry, defaultStarter } from '../src/runs.ts';
+import {
+  defaultAgentNames,
+  defaultLoadDef,
+  registerAgentTools,
+} from '../src/tools.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
@@ -55,6 +62,43 @@ export default function opiumExtension(pi: ExtensionAPI) {
   // Background pi-subagents children load ambient extensions too; a
   // specialist must not be told to orchestrate and delegate.
   const isSubagentChild = process.env.PI_SUBAGENT_CHILD === '1';
+
+  // One run registry per parent session, created on first tool use. Its
+  // starter reads the latest context so new runs use the current model.
+  let registry: RunRegistry | undefined;
+  let latestCtx: ExtensionContext | undefined;
+  const getRegistry = (ctx: ExtensionContext): RunRegistry => {
+    latestCtx = ctx;
+    registry ??= new RunRegistry({
+      start: (def, options) =>
+        defaultStarter({
+          parent: {
+            events: pi.events,
+            get ctx() {
+              return latestCtx ?? ctx;
+            },
+          },
+          cwd: ctx.cwd,
+        })(def, options),
+      onTerminal: () => {},
+    });
+    return registry;
+  };
+  pi.on('session_start', (_event, ctx) => {
+    latestCtx = ctx;
+  });
+  pi.on('session_shutdown', async () => {
+    const current = registry;
+    registry = undefined;
+    latestCtx = undefined;
+    await current?.shutdown();
+  });
+  registerAgentTools(pi, (ctx) => ({
+    registry: getRegistry(ctx),
+    loadDef: defaultLoadDef,
+    agentNames: defaultAgentNames,
+    cwd: ctx.cwd,
+  }));
 
   pi.on('before_agent_start', (event) => {
     if (isSubagentChild || !state.orchestrator) return;

@@ -194,6 +194,21 @@ export class RunRegistry {
       .sort((a, b) => b.startedAt - a.startedAt);
   }
 
+  // agent of a run in memory, or of a pre-restart run from its metadata
+  agentOf(id: string): string | undefined {
+    const known = this.get(id)?.agent;
+    if (known) return known;
+    let agent: string | undefined;
+    try {
+      const meta: unknown = JSON.parse(readFileSync(this.metaPath(id), 'utf8'));
+      const value = (meta as { agent?: unknown } | null)?.agent;
+      if (typeof value === 'string' && value) agent = value;
+    } catch {
+      // unknown run
+    }
+    return agent;
+  }
+
   markRead(id: string): RunRecord | undefined {
     const run = this.get(id);
     if (run) run.unread = false;
@@ -272,14 +287,11 @@ export class RunRegistry {
       entry.cancelRequested = true;
       if (entry.handle) handles.push(entry.handle);
     }
+    // disposing below aborts anyway, so an abort failure is ignored
     await Promise.all(
-      handles.map(async (handle) => {
-        try {
-          if (handle.state === 'running') await handle.abort();
-        } catch {
-          // disposing below aborts anyway
-        }
-      }),
+      handles
+        .filter((handle) => handle.state === 'running')
+        .map((handle) => handle.abort().catch(() => undefined)),
     );
     await Promise.all(handles.map((handle) => RunRegistry.dispose(handle)));
     for (const entry of this.entries.values()) {

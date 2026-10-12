@@ -258,6 +258,9 @@ test('revive after eviction and after restart resumes the transcript', async () 
   assert.equal(h.reg.get('r-1')?.retained, true);
 
   const fresh = setup({ dir: h.dir });
+  // the owner of a pre-restart run comes from its metadata
+  assert.equal(fresh.reg.agentOf('r-2'), 'fixer');
+  assert.equal(fresh.reg.agentOf('zzz'), undefined);
   const { run, done } = fresh.reg.revive('r-2', 'back', def());
   await done;
   assert.equal(fresh.starts[0]?.resumeFrom, join(h.dir, 'r-2.jsonl'));
