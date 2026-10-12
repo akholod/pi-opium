@@ -31,7 +31,8 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "lint": "eslint . && prettier --check \"**/*.ts\" \"**/*.json\" \"**/*.md\"",
     "fix": "eslint . --fix && prettier --write \"**/*.ts\" \"**/*.json\" \"**/*.md\"",
-    "dev": "pi -e ."
+    "dev": "pi -e .",
+    "test:live": "node --experimental-strip-types test/acceptance.live.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

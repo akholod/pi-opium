@@ -275,6 +275,8 @@ export const agentStatus = (
       )}`,
     `objective: ${truncate(run.objective, OBJECTIVE_LIMIT)}`,
   ];
+  const error = run.error ?? run.result?.error;
+  if (error) lines.push(`error: ${error}`);
   if (run.warnings.length) lines.push(`warnings: ${run.warnings.join('; ')}`);
   return out(lines.join('\n'), run);
 };

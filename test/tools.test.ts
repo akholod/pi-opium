@@ -157,6 +157,13 @@ test('foreground completed returns formatted text and marks read', async () => {
   assert.deepEqual(updates, ['fixer: running', 'fixer: completed']);
 });
 
+test('agent_status shows the error of a failed run', async () => {
+  const { deps } = setup({ status: 'failed' });
+  await runAgent(deps, { agent: 'fixer', task: 'x', background: true });
+  await tick();
+  assert.match(agentStatus(deps, { id: 'r-1' }).text, /\nerror: boom\n/);
+});
+
 test('foreground failure throws the formatted text', async () => {
   const { deps } = setup({ status: 'failed' });
   await assert.rejects(
