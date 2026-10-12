@@ -3,16 +3,16 @@
 // synthesizes a structured report. Runs in-process through
 // pi-agent-runner; seats are the agents `councillor-<seat>` (agents/*.md).
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import {
+  loadAgent,
+  type AgentDefinition,
+  type AgentOverrides,
+} from './agents.ts';
 import {
   runAgent,
   type ParentContext,
   type RunAgentResult,
   type RunStatus,
-  type ThinkingLevel,
 } from 'pi-agent-runner';
 
 export const SEATS = ['alpha', 'beta', 'gamma'] as const;
@@ -21,118 +21,12 @@ export type Seat = (typeof SEATS)[number];
 export const COUNCIL_AGENT = 'council';
 export const councillorAgent = (seat: Seat): string => `councillor-${seat}`;
 
-const THINKING_LEVELS: readonly string[] = [
-  'off',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-];
-
-const PACKAGE_AGENTS_DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'agents',
-);
-
-export interface CouncilAgent {
-  name: string;
-  prompt: string;
-  model?: string;
-  // requested models in order: [model ?? 'inherit', ...fallbackModels], deduped
-  models: string[];
-  thinking?: ThinkingLevel;
-  timeoutMs?: number;
-}
-
 export interface Attempt {
   // requested model id (the list entry)
   model: string;
   status: RunStatus | 'empty';
   error?: string;
 }
-
-// Directories searched in order: the user override, then the package.
-export const defaultAgentDirs = (): string[] => [
-  join(getAgentDir(), 'agents'),
-  PACKAGE_AGENTS_DIR,
-];
-
-export const loadCouncilAgent = (
-  name: string,
-  dirs: readonly string[] = defaultAgentDirs(),
-): CouncilAgent => {
-  let file: string | undefined;
-  let raw = '';
-  for (const dir of dirs) {
-    const candidate = join(dir, `${name}.md`);
-    try {
-      raw = readFileSync(candidate, 'utf8');
-      file = candidate;
-      break;
-    } catch {
-      // try the next directory
-    }
-  }
-  if (!file) {
-    throw new Error(`agent file ${name}.md not found in ${dirs.join(', ')}`);
-  }
-  const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
-  const agent: CouncilAgent = { name, prompt: body.trim(), models: [] };
-  const { model, fallbackModels, thinking, timeoutMs } = frontmatter;
-  if (model !== undefined) {
-    if (typeof model !== 'string' || !model.trim()) {
-      throw new Error(`${file}: model must be a non-empty string`);
-    }
-    agent.model = model.trim();
-  }
-  if (thinking !== undefined) {
-    if (typeof thinking !== 'string' || !THINKING_LEVELS.includes(thinking)) {
-      throw new Error(
-        `${file}: thinking must be one of ${THINKING_LEVELS.join('|')}`,
-      );
-    }
-    agent.thinking = thinking as ThinkingLevel;
-  }
-  if (timeoutMs !== undefined) {
-    if (typeof timeoutMs !== 'number' || !(timeoutMs > 0)) {
-      throw new Error(`${file}: timeoutMs must be a positive number`);
-    }
-    agent.timeoutMs = timeoutMs;
-  }
-  const fallbacks: string[] = [];
-  if (fallbackModels !== undefined && fallbackModels !== null) {
-    let entries: unknown[] | undefined;
-    if (typeof fallbackModels === 'string') {
-      entries = fallbackModels.split(',');
-    } else if (Array.isArray(fallbackModels)) {
-      entries = fallbackModels;
-    }
-    if (!entries) {
-      throw new Error(
-        `${file}: fallbackModels must be a comma-separated string or a list`,
-      );
-    }
-    for (const entry of entries) {
-      if (typeof entry !== 'string') {
-        throw new Error(`${file}: fallbackModels entries must be strings`);
-      }
-      const id = entry.trim();
-      if (!id && typeof fallbackModels === 'string') continue;
-      const slash = id.indexOf('/');
-      if (slash < 1 || slash === id.length - 1) {
-        throw new Error(
-          `${file}: fallbackModels entry "${id}" must look like provider/id`,
-        );
-      }
-      fallbacks.push(id);
-    }
-  }
-  agent.models = [...new Set([agent.model ?? 'inherit', ...fallbacks])];
-  return agent;
-};
 
 const SEAT_TOOLS = ['read', 'grep', 'find', 'ls'];
 
@@ -150,6 +44,7 @@ export interface CouncilOptions {
   // test seams
   runAgent?: typeof runAgent;
   agentDirs?: readonly string[];
+  overrides?: AgentOverrides;
 }
 
 export interface SeatResult {
@@ -205,7 +100,7 @@ export interface FallbackOutcome {
 }
 
 export type StartAttempt = (
-  agent: CouncilAgent,
+  agent: AgentDefinition,
   task: string,
   tools: string[],
   model: string,
@@ -218,7 +113,7 @@ const isAnswer = (r: RunAgentResult): boolean =>
 
 export const runWithFallback = async (
   start: StartAttempt,
-  agent: CouncilAgent,
+  agent: AgentDefinition,
   task: string,
   tools: string[],
   signal?: AbortSignal,
@@ -342,13 +237,17 @@ export const runCouncil = async (
   const errorText = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
 
-  let seatAgents: CouncilAgent[];
-  let synthesizer: CouncilAgent;
+  const loadOptions = {
+    dirs: options.agentDirs,
+    overrides: options.overrides,
+  };
+  let seatAgents: AgentDefinition[];
+  let synthesizer: AgentDefinition;
   try {
     seatAgents = seats.map((seat) =>
-      loadCouncilAgent(councillorAgent(seat), options.agentDirs),
+      loadAgent(councillorAgent(seat), loadOptions),
     );
-    synthesizer = loadCouncilAgent(COUNCIL_AGENT, options.agentDirs);
+    synthesizer = loadAgent(COUNCIL_AGENT, loadOptions);
   } catch (error) {
     return result('failed', [], '', errorText(error));
   }
@@ -367,7 +266,7 @@ export const runCouncil = async (
       signal: options.signal,
     });
   const chain = (
-    agent: CouncilAgent,
+    agent: AgentDefinition,
     task: string,
     tools: string[],
     label: string,

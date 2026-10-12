@@ -29,7 +29,18 @@ export const readState = (path: string): CrewState => {
   }
 };
 
+// Keeps other keys already in the file (e.g. per-agent `agents` overrides).
 export const writeState = (path: string, state: CrewState): void => {
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+      existing = raw as Record<string, unknown>;
+    }
+  } catch {
+    // missing or unreadable: start fresh
+  }
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  const merged = { ...existing, ...state };
+  writeFileSync(path, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 };

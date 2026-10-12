@@ -6,17 +6,23 @@
 // Specialist agents live in ~/.pi/agent/agents/*.md (pi-subagents);
 // the council runs in-process through pi-agent-runner.
 
+import { join } from 'node:path';
 import { Type } from 'typebox';
 import {
   CONFIG_DIR_NAME,
+  getAgentDir,
   type ExtensionAPI,
 } from '@earendil-works/pi-coding-agent';
 import { humanWaitTracker } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import { readState, statePath, writeState } from '../src/state.ts';
+import { readAgentOverrides } from '../src/agents.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
+
+const agentOverrides = (path: string) =>
+  readAgentOverrides(path, join(getAgentDir(), 'settings.json'));
 
 const formatUsage = ({ usage }: CouncilResult): string => {
   const tokens = usage.input + usage.output;
@@ -82,11 +88,16 @@ export default function opiumExtension(pi: ExtensionAPI) {
         ctx.ui.notify('usage: /council <question>', 'error');
         return;
       }
+      const { overrides, errors } = agentOverrides(path);
+      for (const error of errors) {
+        ctx.ui.notify(`[council] ${error}`, 'warning');
+      }
       ctx.ui.notify('[council] convening alpha, beta, gamma', 'info');
       const result = await runCouncil({
         parent: { events: pi.events, ctx },
         cwd: ctx.cwd,
         question,
+        overrides,
         signal: ctx.signal,
         onProgress: (message) => ctx.ui.notify(`[${message}]`, 'info'),
       });
@@ -141,6 +152,7 @@ export default function opiumExtension(pi: ExtensionAPI) {
         cwd: ctx.cwd,
         question: params.question,
         context: params.context,
+        overrides: agentOverrides(path).overrides,
         signal,
         onProgress: (message) =>
           onUpdate?.({

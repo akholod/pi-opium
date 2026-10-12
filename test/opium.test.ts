@@ -11,7 +11,8 @@ import type {
   RunAgentResult,
 } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { loadCouncilAgent, runCouncil } from '../src/council.ts';
+import { loadAgent } from '../src/agents.ts';
+import { runCouncil } from '../src/council.ts';
 import { readState, writeState, DEFAULT_STATE } from '../src/state.ts';
 
 const parent = {
@@ -55,6 +56,22 @@ test('state round-trips and defaults to on', () => {
   assert.deepEqual(readState(path), DEFAULT_STATE);
   writeState(path, { orchestrator: false });
   assert.deepEqual(readState(path), { orchestrator: false });
+});
+
+test('writeState preserves other keys in the file', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'opium-')), 'opium.json');
+  writeFileSync(
+    path,
+    JSON.stringify({
+      orchestrator: true,
+      agents: { oracle: { model: 'a/b' } },
+    }),
+  );
+  writeState(path, { orchestrator: false });
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
+    orchestrator: false,
+    agents: { oracle: { model: 'a/b' } },
+  });
 });
 
 // the councillor prompts are identical; the models tell the agents apart
@@ -184,13 +201,16 @@ test('council: explicit timeoutMs overrides the agent file', async () => {
 test('council: an invalid agent file fails and names the file', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'opium-agents-'));
   for (const name of ['alpha', 'beta', 'gamma']) {
-    writeFileSync(join(dir, `councillor-${name}.md`), 'prompt\n');
+    writeFileSync(
+      join(dir, `councillor-${name}.md`),
+      '---\ndescription: d\n---\nprompt\n',
+    );
   }
   writeFileSync(
     join(dir, 'councillor-alpha.md'),
-    '---\nthinking: ludicrous\n---\nprompt\n',
+    '---\ndescription: d\nthinking: ludicrous\n---\nprompt\n',
   );
-  writeFileSync(join(dir, 'council.md'), 'prompt\n');
+  writeFileSync(join(dir, 'council.md'), '---\ndescription: d\n---\nprompt\n');
   const f = fake();
   const result = await runCouncil({
     parent,
@@ -245,7 +265,7 @@ const scripted = (script: Script) => {
 const fallbackDir = (council = '') => {
   const dir = mkdtempSync(join(tmpdir(), 'opium-fb-'));
   const fm = (name: string, extra: string) =>
-    `---\nmodel: p/${name}\n${extra}---\n${name}\n`;
+    `---\ndescription: d\nmodel: p/${name}\n${extra}---\n${name}\n`;
   writeFileSync(
     join(dir, 'councillor-alpha.md'),
     fm('alpha', 'fallbackModels: p/alpha2, p/alpha3\n'),
@@ -407,8 +427,8 @@ test('council fallback: synthesizer falls back too', async () => {
 test('loader: fallbackModels parses strings and lists, validates', () => {
   const load = (fm: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'opium-ld-'));
-    writeFileSync(join(dir, 'x.md'), `---\n${fm}---\nbody\n`);
-    return () => loadCouncilAgent('x', [dir]);
+    writeFileSync(join(dir, 'x.md'), `---\ndescription: d\n${fm}---\nbody\n`);
+    return () => loadAgent('x', { dirs: [dir] });
   };
   assert.deepEqual(load('model: a/b\nfallbackModels: c/d, e/f\n')().models, [
     'a/b',

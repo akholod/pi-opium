@@ -1,12 +1,13 @@
 ---
 name: fast-generic
-description: Routine mechanical command work: git status/diff/log reconnaissance, normal commit preparation, creating commits, pushing, and no-edit validation (lint, typecheck, tests, builds). Never edits code; never runs destructive git history operations unless the user explicitly asked for that exact operation.
+description: Routine mechanical command work — git status/diff/log reconnaissance, normal commit preparation, creating commits, pushing, and no-edit validation (lint, typecheck, tests, builds). Never edits code; never runs destructive git history operations unless the user explicitly asked for that exact operation.
 advertise: true
 model: openai-codex/gpt-6-luna
 thinking: low
 tools: read, grep, find, ls, bash
 inheritProjectContext: true
 async: true
+gitGuard: false
 defaultContext: fresh
 timeoutMs: 900000
 ---
