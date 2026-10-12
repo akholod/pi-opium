@@ -4,6 +4,9 @@
 // with native completion notifications instead of the Background Job Board,
 // `resume`/`steer` instead of task_id reuse.
 
+// The prompt text goes to the model verbatim; wrapping would change it.
+/* eslint-disable max-len */
+
 export interface OrchestratorPromptOptions {
   // agent names to leave out of the roster (disabled or not installed)
   disabled?: readonly string[];

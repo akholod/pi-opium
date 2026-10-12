@@ -31,5 +31,5 @@ export const readState = (path: string): CrewState => {
 
 export const writeState = (path: string, state: CrewState): void => {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(state, null, 2) + '\n', 'utf8');
+  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 };

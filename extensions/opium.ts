@@ -16,20 +16,23 @@ import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
 
-const formatUsage = (result: CouncilResult): string =>
-  `usage: ${result.usage.runs} runs, ${result.usage.input + result.usage.output} tokens, $${result.usage.cost.toFixed(4)}`;
+const formatUsage = ({ usage }: CouncilResult): string => {
+  const tokens = usage.input + usage.output;
+  const cost = usage.cost.toFixed(4);
+  return `usage: ${usage.runs} runs, ${tokens} tokens, $${cost}`;
+};
+
+const outcomeLine = (result: CouncilResult): string =>
+  `${result.outcome}${result.error ? `: ${result.error}` : ''}`;
 
 // Report for the transcript / tool result. Failed synthesis still shows
 // the raw councillor answers rather than nothing.
 const renderCouncil = (result: CouncilResult): string => {
   const lines = [`# Council: ${result.question}`, ''];
-  if (result.outcome === 'completed') lines.push(result.report);
-  else {
-    lines.push(
-      `council ${result.outcome}${result.error ? `: ${result.error}` : ''}`,
-      '',
-      renderSeats(result.seats),
-    );
+  if (result.outcome === 'completed') {
+    lines.push(result.report);
+  } else {
+    lines.push(`council ${outcomeLine(result)}`, '', renderSeats(result.seats));
   }
   lines.push('', formatUsage(result));
   return lines.join('\n');
@@ -60,16 +63,15 @@ export default function opiumExtension(pi: ExtensionAPI) {
         ctx.ui.notify('usage: /orchestrator on | off | status', 'error');
         return;
       }
-      ctx.ui.notify(
-        `[opium] orchestrator prompt is ${state.orchestrator ? 'ON' : 'OFF'} (${path})`,
-        'info',
-      );
+      const mode = state.orchestrator ? 'ON' : 'OFF';
+      ctx.ui.notify(`[opium] orchestrator prompt is ${mode} (${path})`, 'info');
     },
   });
 
   pi.registerCommand('council', {
     description:
-      'Ask the multi-model council: three councillors answer independently, the council synthesizes',
+      'Ask the multi-model council: three councillors answer ' +
+      'independently, the council synthesizes',
     handler: async (args, ctx) => {
       const question = args.trim();
       if (question === '') {
@@ -94,10 +96,7 @@ export default function opiumExtension(pi: ExtensionAPI) {
         { triggerTurn: false },
       );
       if (result.outcome !== 'completed') {
-        ctx.ui.notify(
-          `[council] ${result.outcome}${result.error ? `: ${result.error}` : ''}`,
-          'error',
-        );
+        ctx.ui.notify(`[council] ${outcomeLine(result)}`, 'error');
       }
     },
   });
@@ -106,12 +105,20 @@ export default function opiumExtension(pi: ExtensionAPI) {
     name: 'council',
     label: 'Council',
     description:
-      'Multi-model consensus: three read-only councillors on different models answer the question independently, then a synthesizer returns a structured report (Council Response, Per-Councillor Details, Council Summary). Slow and expensive; use for high-stakes decisions, not routine work.',
+      'Multi-model consensus: three read-only councillors on different ' +
+      'models answer the question independently, then a synthesizer ' +
+      'returns a structured report (Council Response, Per-Councillor ' +
+      'Details, Council Summary). Slow and expensive; use for high-stakes ' +
+      'decisions, not routine work.',
     promptSnippet: 'Multi-model council for high-stakes decisions',
     promptGuidelines: [
-      'Use the council tool only for critical decisions that benefit from several independent model perspectives, or when the user asks for council, consensus or multiple opinions.',
-      'Pass the full question and the relevant context (paths, constraints, options under consideration).',
-      'Preserve the report structure when relaying it; state the recommendation briefly before acting on it.',
+      'Use the council tool only for critical decisions that benefit ' +
+        'from several independent model perspectives, or when the user ' +
+        'asks for council, consensus or multiple opinions.',
+      'Pass the full question and the relevant context (paths, ' +
+        'constraints, options under consideration).',
+      'Preserve the report structure when relaying it; state the ' +
+        'recommendation briefly before acting on it.',
     ],
     parameters: Type.Object({
       question: Type.String({

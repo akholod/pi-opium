@@ -155,6 +155,8 @@ export const delegate = (
     }
 
     const startTimer = setTimeout(() => {
+      // cleanup needs the timer and listeners declared below
+      // eslint-disable-next-line no-use-before-define
       cleanup();
       reject(new Error('pi-subagents did not pick up the delegation request'));
     }, START_TIMEOUT_MS);
@@ -167,6 +169,7 @@ export const delegate = (
     const offResponse = pi.events.on(DELEGATION_RESPONSE_EVENT, (payload) => {
       const response = payload as DelegationResponse;
       if (!matches(request, response)) return;
+      // eslint-disable-next-line no-use-before-define
       cleanup();
       resolve(response);
     });

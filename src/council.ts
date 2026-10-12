@@ -220,8 +220,9 @@ export const runCouncil = async (
 // Fallback rendering when synthesis failed but councillors answered.
 export const renderSeats = (seats: SeatResult[]): string =>
   seats
-    .map(
-      (seat) =>
-        `## Councillor ${seat.seat}${seat.model ? ` (${seat.model})` : ''}\n\n${seat.ok ? seat.text : `[no answer: ${seat.text}]`}`,
-    )
+    .map((seat) => {
+      const model = seat.model ? ` (${seat.model})` : '';
+      const body = seat.ok ? seat.text : `[no answer: ${seat.text}]`;
+      return `## Councillor ${seat.seat}${model}\n\n${body}`;
+    })
     .join('\n\n');

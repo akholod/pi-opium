@@ -1,0 +1,6 @@
+# Role prompts are passed to models verbatim.
+agents/
+.omc/
+.pi/
+node_modules/
+package-lock.json

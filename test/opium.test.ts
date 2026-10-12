@@ -49,9 +49,13 @@ const fake = (answers: Record<string, DelegationResponse['status']> = {}) => {
     calls.push(request);
     const status = answers[request.agent] ?? 'completed';
     if (status !== 'completed') return { requestId: 'r', status };
+    const responses = request.task
+      .split('# Councillor responses')[1]
+      ?.replace(/\s+/g, ' ')
+      .trim();
     const text =
       request.agent === 'council'
-        ? `## Council Response\nsynth of: ${request.task.split('# Councillor responses')[1]?.replace(/\s+/g, ' ').trim()}`
+        ? `## Council Response\nsynth of: ${responses}`
         : `${request.agent} says hi`;
     return {
       requestId: 'r',
