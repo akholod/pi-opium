@@ -11,7 +11,7 @@ import type {
   RunAgentResult,
 } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { runCouncil } from '../src/council.ts';
+import { loadCouncilAgent, runCouncil } from '../src/council.ts';
 import { readState, writeState, DEFAULT_STATE } from '../src/state.ts';
 
 const parent = {
@@ -202,4 +202,226 @@ test('council: an invalid agent file fails and names the file', async () => {
   assert.equal(result.outcome, 'failed');
   assert.match(result.error ?? '', /councillor-alpha\.md.*thinking/);
   assert.equal(f.calls.length, 0);
+});
+
+// scripted fake: results keyed by `${agent}|${model}`, consumed per attempt
+type Script = Record<string, (RunAgentResult['status'] | string)[]>;
+const scripted = (script: Script) => {
+  const calls: { key: string; task: string }[] = [];
+  const runAgent = async (opts: RunAgentOptions): Promise<RunAgentResult> => {
+    const agent = opts.systemPrompt.split('\n')[0];
+    const key = `${agent}|${opts.model}`;
+    calls.push({ key, task: opts.task });
+    const step = script[key]?.shift() ?? 'ok';
+    const usage = {
+      input: 5,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0.01,
+      turns: 1,
+      toolCalls: 0,
+      durationMs: 1,
+      waitedMs: 0,
+    };
+    if (['failed', 'timed_out', 'cancelled'].includes(step)) {
+      return {
+        status: step as RunAgentResult['status'],
+        value: undefined,
+        usage,
+        error: `${step} err`,
+      };
+    }
+    return {
+      status: 'completed',
+      value: step === 'ok' ? `${key} answer` : step,
+      usage,
+      model: `resolved/${opts.model}`,
+    };
+  };
+  return { runAgent, calls };
+};
+
+const fallbackDir = (council = '') => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-fb-'));
+  const fm = (name: string, extra: string) =>
+    `---\nmodel: p/${name}\n${extra}---\n${name}\n`;
+  writeFileSync(
+    join(dir, 'councillor-alpha.md'),
+    fm('alpha', 'fallbackModels: p/alpha2, p/alpha3\n'),
+  );
+  writeFileSync(join(dir, 'councillor-beta.md'), fm('beta', ''));
+  writeFileSync(join(dir, 'councillor-gamma.md'), fm('gamma', ''));
+  writeFileSync(join(dir, 'council.md'), fm('council', council));
+  return dir;
+};
+
+test('council fallback: failed primary falls back to the next model', async () => {
+  const f = scripted({ 'alpha|p/alpha': ['failed'] });
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir()],
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'completed', result.error);
+  const alpha = result.seats[0];
+  assert.equal(alpha.ok, true);
+  assert.equal(alpha.model, 'resolved/p/alpha2');
+  assert.equal(alpha.attempts.length, 2);
+  assert.deepEqual(
+    alpha.attempts.map((a) => [a.model, a.status]),
+    [
+      ['p/alpha', 'failed'],
+      ['p/alpha2', 'completed'],
+    ],
+  );
+  assert.equal(result.usage.runs, 5);
+});
+
+test('council fallback: empty answers retry the same model once', async () => {
+  const retried = scripted({ 'alpha|p/alpha': ['', 'answer'] });
+  const dir = fallbackDir();
+  const r1 = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [dir],
+    runAgent: retried.runAgent,
+  });
+  assert.equal(r1.seats[0].ok, true);
+  assert.equal(r1.seats[0].text, 'answer');
+  assert.equal(r1.seats[0].attempts.length, 2);
+  assert.equal(r1.seats[0].attempts[0].status, 'empty');
+  assert.equal(r1.seats[0].model, 'resolved/p/alpha');
+
+  const moved = scripted({ 'alpha|p/alpha': ['', '  '] });
+  const progress: string[] = [];
+  const r2 = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [dir],
+    runAgent: moved.runAgent,
+    onProgress: (m) => progress.push(m),
+  });
+  assert.equal(r2.seats[0].ok, true);
+  assert.equal(r2.seats[0].attempts.length, 3);
+  assert.equal(r2.seats[0].model, 'resolved/p/alpha2');
+  assert.ok(
+    progress.includes('council: alpha empty answer from p/alpha, retrying'),
+  );
+  assert.ok(
+    progress.includes(
+      'council: alpha empty answer on p/alpha, trying p/alpha2',
+    ),
+  );
+});
+
+test('council fallback: exhausted chain fails the seat only', async () => {
+  const f = scripted({
+    'alpha|p/alpha': ['failed'],
+    'alpha|p/alpha2': ['', ''],
+    'alpha|p/alpha3': ['timed_out'],
+  });
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir()],
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'completed', result.error);
+  const alpha = result.seats[0];
+  assert.equal(alpha.ok, false);
+  assert.equal(alpha.status, 'timed_out');
+  assert.equal(alpha.attempts.length, 4);
+  assert.equal(
+    alpha.text,
+    'timed_out: timed_out err (tried p/alpha, p/alpha2, p/alpha3)',
+  );
+  assert.equal(result.seats[1].ok, true);
+  assert.match(f.calls[f.calls.length - 1].task, /\[no answer: timed_out/);
+  assert.equal(result.usage.runs, 4 + 2 + 1);
+
+  const empty = scripted({
+    'alpha|p/alpha': ['', ''],
+    'alpha|p/alpha2': ['', ''],
+    'alpha|p/alpha3': ['', ''],
+  });
+  const r2 = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir()],
+    runAgent: empty.runAgent,
+  });
+  assert.equal(r2.seats[0].status, 'failed');
+  assert.match(r2.seats[0].text, /^failed: empty answer \(tried /);
+});
+
+test('council fallback: cancelled stops without fallback', async () => {
+  const f = scripted({ 'alpha|p/alpha': ['cancelled'] });
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir()],
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'aborted');
+  assert.equal(result.seats[0].status, 'cancelled');
+  assert.equal(result.seats[0].attempts.length, 1);
+  assert.ok(!f.calls.some((c) => c.key === 'alpha|p/alpha2'));
+});
+
+test('council fallback: synthesizer falls back too', async () => {
+  const f = scripted({ 'council|p/council': ['timed_out'] });
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir('fallbackModels: p/council2\n')],
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'completed', result.error);
+  assert.equal(result.report, 'council|p/council2 answer');
+  assert.equal(result.usage.runs, 5);
+
+  const dead = scripted({
+    'council|p/council': ['failed'],
+    'council|p/council2': ['failed'],
+  });
+  const failed = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [fallbackDir('fallbackModels: p/council2\n')],
+    runAgent: dead.runAgent,
+  });
+  assert.equal(failed.outcome, 'failed');
+  assert.equal(failed.error, 'council synthesis failed: failed err');
+});
+
+test('loader: fallbackModels parses strings and lists, validates', () => {
+  const load = (fm: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'opium-ld-'));
+    writeFileSync(join(dir, 'x.md'), `---\n${fm}---\nbody\n`);
+    return () => loadCouncilAgent('x', [dir]);
+  };
+  assert.deepEqual(load('model: a/b\nfallbackModels: c/d, e/f\n')().models, [
+    'a/b',
+    'c/d',
+    'e/f',
+  ]);
+  assert.deepEqual(
+    load('model: a/b\nfallbackModels:\n  - c/d\n  - a/b\n')().models,
+    ['a/b', 'c/d'],
+  );
+  assert.deepEqual(load('fallbackModels: \n')().models, ['inherit']);
+  assert.deepEqual(load('fallbackModels: []\n')().models, ['inherit']);
+  assert.deepEqual(load('')().models, ['inherit']);
+  assert.throws(load('fallbackModels: c/d, nope\n'), /x\.md: fallbackModels/);
+  assert.throws(load('fallbackModels: c/\n'), /fallbackModels/);
 });

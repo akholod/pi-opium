@@ -41,8 +41,17 @@ export interface CouncilAgent {
   name: string;
   prompt: string;
   model?: string;
+  // requested models in order: [model ?? 'inherit', ...fallbackModels], deduped
+  models: string[];
   thinking?: ThinkingLevel;
   timeoutMs?: number;
+}
+
+export interface Attempt {
+  // requested model id (the list entry)
+  model: string;
+  status: RunStatus | 'empty';
+  error?: string;
 }
 
 // Directories searched in order: the user override, then the package.
@@ -71,8 +80,8 @@ export const loadCouncilAgent = (
     throw new Error(`agent file ${name}.md not found in ${dirs.join(', ')}`);
   }
   const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
-  const agent: CouncilAgent = { name, prompt: body.trim() };
-  const { model, thinking, timeoutMs } = frontmatter;
+  const agent: CouncilAgent = { name, prompt: body.trim(), models: [] };
+  const { model, fallbackModels, thinking, timeoutMs } = frontmatter;
   if (model !== undefined) {
     if (typeof model !== 'string' || !model.trim()) {
       throw new Error(`${file}: model must be a non-empty string`);
@@ -93,6 +102,35 @@ export const loadCouncilAgent = (
     }
     agent.timeoutMs = timeoutMs;
   }
+  const fallbacks: string[] = [];
+  if (fallbackModels !== undefined && fallbackModels !== null) {
+    let entries: unknown[] | undefined;
+    if (typeof fallbackModels === 'string') {
+      entries = fallbackModels.split(',');
+    } else if (Array.isArray(fallbackModels)) {
+      entries = fallbackModels;
+    }
+    if (!entries) {
+      throw new Error(
+        `${file}: fallbackModels must be a comma-separated string or a list`,
+      );
+    }
+    for (const entry of entries) {
+      if (typeof entry !== 'string') {
+        throw new Error(`${file}: fallbackModels entries must be strings`);
+      }
+      const id = entry.trim();
+      if (!id && typeof fallbackModels === 'string') continue;
+      const slash = id.indexOf('/');
+      if (slash < 1 || slash === id.length - 1) {
+        throw new Error(
+          `${file}: fallbackModels entry "${id}" must look like provider/id`,
+        );
+      }
+      fallbacks.push(id);
+    }
+  }
+  agent.models = [...new Set([agent.model ?? 'inherit', ...fallbacks])];
   return agent;
 };
 
@@ -122,6 +160,7 @@ export interface SeatResult {
   // answer text, or the failure reason
   text: string;
   ok: boolean;
+  attempts: Attempt[];
 }
 
 export interface CouncilUsage {
@@ -143,9 +182,6 @@ export interface CouncilResult {
 
 const DEFAULT_TIMEOUT_MS = 900_000;
 
-const failureText = (response: RunAgentResult): string =>
-  response.status + (response.error ? `: ${response.error}` : '');
-
 const usageOf = (responses: RunAgentResult[]): CouncilUsage => {
   const usage: CouncilUsage = { cost: 0, input: 0, output: 0, runs: 0 };
   for (const response of responses) {
@@ -155,6 +191,94 @@ const usageOf = (responses: RunAgentResult[]): CouncilUsage => {
     usage.runs++;
   }
   return usage;
+};
+
+export interface FallbackOutcome {
+  status: RunStatus;
+  value?: string;
+  error?: string;
+  // resolved model of the final attempt
+  model?: string;
+  attempts: Attempt[];
+  // every underlying run, for usage accounting
+  runs: RunAgentResult[];
+}
+
+export type StartAttempt = (
+  agent: CouncilAgent,
+  task: string,
+  tools: string[],
+  model: string,
+) => Promise<RunAgentResult>;
+
+const isAnswer = (r: RunAgentResult): boolean =>
+  r.status === 'completed' &&
+  typeof r.value === 'string' &&
+  r.value.trim() !== '';
+
+export const runWithFallback = async (
+  start: StartAttempt,
+  agent: CouncilAgent,
+  task: string,
+  tools: string[],
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void,
+  label: string = agent.name,
+): Promise<FallbackOutcome> => {
+  const attempts: Attempt[] = [];
+  const runs: RunAgentResult[] = [];
+  const models = agent.models.length ? agent.models : ['inherit'];
+  let last: RunAgentResult | undefined;
+  let lastEmpty = false;
+  for (const [index, model] of models.entries()) {
+    const next = models[index + 1];
+    for (let retry = 0; retry < 2; retry++) {
+      const response = await start(agent, task, tools, model);
+      runs.push(response);
+      last = response;
+      if (isAnswer(response)) {
+        attempts.push({ model, status: 'completed' });
+        return {
+          status: 'completed',
+          value: (response.value as string).trim(),
+          model: response.model ?? model,
+          attempts,
+          runs,
+        };
+      }
+      const empty = response.status === 'completed';
+      lastEmpty = empty;
+      const error = empty ? 'empty answer' : response.error;
+      attempts.push({
+        model,
+        status: empty ? 'empty' : response.status,
+        ...(error ? { error } : {}),
+      });
+      if (response.status === 'cancelled' || signal?.aborted) {
+        return {
+          status: 'cancelled',
+          error: response.error,
+          model: response.model ?? model,
+          attempts,
+          runs,
+        };
+      }
+      if (empty && retry === 0) {
+        onProgress?.(`council: ${label} empty answer from ${model}, retrying`);
+        continue;
+      }
+      break;
+    }
+    if (next) {
+      const status = lastEmpty ? 'empty answer' : last?.status;
+      onProgress?.(`council: ${label} ${status} on ${model}, trying ${next}`);
+    }
+  }
+  const finalModel = models[models.length - 1];
+  const base: Pick<FallbackOutcome, 'status' | 'error'> = lastEmpty
+    ? { status: 'failed', error: 'empty answer' }
+    : { status: last?.status ?? 'failed', error: last?.error };
+  return { ...base, model: last?.model ?? finalModel, attempts, runs };
 };
 
 export const buildCouncillorTask = (
@@ -228,52 +352,69 @@ export const runCouncil = async (
   } catch (error) {
     return result('failed', [], '', errorText(error));
   }
-  const start = (agent: CouncilAgent, task: string, tools: string[]) =>
+  const start: StartAttempt = (agent, task, tools, model) =>
     run({
       parent: options.parent,
       cwd: options.cwd,
       systemPrompt: agent.prompt,
       task,
       tools,
-      model: agent.model ?? 'inherit',
+      model,
       thinking: agent.thinking,
       extensions: 'none',
       result: { kind: 'text' },
       timeoutMs: options.timeoutMs ?? agent.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       signal: options.signal,
     });
+  const chain = (
+    agent: CouncilAgent,
+    task: string,
+    tools: string[],
+    label: string,
+  ) =>
+    runWithFallback(
+      start,
+      agent,
+      task,
+      tools,
+      options.signal,
+      options.onProgress,
+      label,
+    );
+  const failureOf = (outcome: FallbackOutcome): string => {
+    const text = outcome.status + (outcome.error ? `: ${outcome.error}` : '');
+    const tried = [...new Set(outcome.attempts.map((a) => a.model))];
+    return tried.length > 1 ? `${text} (tried ${tried.join(', ')})` : text;
+  };
 
   options.onProgress?.(`council: asking ${seats.join(', ')} in parallel`);
   let seatResults: SeatResult[];
   try {
-    const answers = await Promise.all(
-      seatAgents.map((agent) =>
-        start(
-          agent,
-          buildCouncillorTask(options.question, options.context),
-          SEAT_TOOLS,
-        ),
-      ),
+    const task = buildCouncillorTask(options.question, options.context);
+    const outcomes = await Promise.all(
+      seatAgents.map(async (agent, index) => {
+        const outcome = await chain(agent, task, SEAT_TOOLS, seats[index]);
+        // as each seat finishes, so a slow seat is visible while waiting
+        options.onProgress?.(`council: ${seats[index]} ${outcome.status}`);
+        return outcome;
+      }),
     );
-    responses.push(...answers);
     seatResults = seats.map((seat, index) => {
-      const response = answers[index];
-      const ok =
-        response.status === 'completed' && typeof response.value === 'string';
+      const outcome = outcomes[index];
+      responses.push(...outcome.runs);
+      const ok = outcome.status === 'completed';
       return {
         seat,
         agent: councillorAgent(seat),
-        model: response.model,
-        status: response.status,
-        text: ok ? (response.value as string).trim() : failureText(response),
+        model: outcome.model,
+        status: outcome.status,
+        text: ok ? (outcome.value as string) : failureOf(outcome),
         ok,
+        attempts: outcome.attempts,
       };
     });
   } catch (error) {
     return result('failed', [], '', errorText(error));
-  }
-  for (const seat of seatResults) {
-    options.onProgress?.(`council: ${seat.seat} ${seat.status}`);
   }
   if (
     options.signal?.aborted ||
@@ -286,29 +427,31 @@ export const runCouncil = async (
   }
 
   options.onProgress?.('council: synthesizing');
-  let synthesis: RunAgentResult;
+  let synthesis: FallbackOutcome;
   try {
-    synthesis = await start(
+    synthesis = await chain(
       synthesizer,
       buildCouncilTask(options.question, options.context, seatResults),
       [],
+      'synthesis',
     );
   } catch (error) {
     return result('failed', seatResults, '', errorText(error));
   }
-  responses.push(synthesis);
+  responses.push(...synthesis.runs);
   if (synthesis.status === 'cancelled') {
     return result('aborted', seatResults, '');
   }
-  if (synthesis.status !== 'completed' || typeof synthesis.value !== 'string') {
+  if (synthesis.status !== 'completed') {
+    const detail = synthesis.error ? `: ${synthesis.error}` : '';
     return result(
       'failed',
       seatResults,
       '',
-      `council synthesis ${failureText(synthesis)}`,
+      `council synthesis ${synthesis.status}${detail}`,
     );
   }
-  return result('completed', seatResults, synthesis.value.trim());
+  return result('completed', seatResults, synthesis.value as string);
 };
 
 // Fallback rendering when synthesis failed but councillors answered.
