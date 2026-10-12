@@ -17,7 +17,7 @@ import {
   type TurnOptions,
 } from 'pi-agent-runner';
 import type { AgentDefinition } from './agents.ts';
-import { buildLaunch } from './launch.ts';
+import { buildLaunch, discoverSkills, skillResolver } from './launch.ts';
 
 export type RunState = 'starting' | 'running' | RunStatus;
 
@@ -480,7 +480,14 @@ export const defaultStarter =
   (ctx: StarterContext): Starter =>
   async (def, options) => {
     const cwd = options.cwd ?? ctx.cwd;
-    const launch = buildLaunch(def, { parent: ctx.parent, cwd });
+    const skills = def.skills.length
+      ? skillResolver(await discoverSkills(cwd))
+      : undefined;
+    const launch = buildLaunch(def, {
+      parent: ctx.parent,
+      cwd,
+      resolveSkill: skills,
+    });
     const handle = await startAgent({
       ...launch.start,
       ...(options.transcriptPath && {

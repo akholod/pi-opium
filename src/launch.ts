@@ -3,6 +3,8 @@
 
 import { readFileSync } from 'node:fs';
 import {
+  DefaultPackageManager,
+  SettingsManager,
   getAgentDir,
   loadSkills,
   stripFrontmatter,
@@ -33,37 +35,52 @@ export interface Launch {
   warnings: string[];
 }
 
-export const defaultResolveSkill = (
-  name: string,
+// The skills a `pi` session in cwd would see: Pi's package manager resolves
+// every source (~/.pi/agent/skills, ~/.agents/skills, project dirs,
+// packages); loadSkills alone covers only the first and .pi/skills.
+export const discoverSkills = async (
   cwd: string,
-): ResolvedSkill | undefined => {
+): Promise<Map<string, string>> => {
+  const agentDir = getAgentDir();
+  const manager = new DefaultPackageManager({
+    cwd,
+    agentDir,
+    settingsManager: SettingsManager.create(cwd, agentDir),
+  });
+  const resolved = await manager.resolve();
   const { skills } = loadSkills({
     cwd,
-    agentDir: getAgentDir(),
-    skillPaths: [],
-    includeDefaults: true,
+    agentDir,
+    skillPaths: resolved.skills.filter((s) => s.enabled).map((s) => s.path),
+    includeDefaults: false,
   });
-  const skill = skills.find((s) => s.name === name);
-  let resolved: ResolvedSkill | undefined;
-  if (skill) {
-    try {
-      resolved = {
-        path: skill.filePath,
-        content: stripFrontmatter(readFileSync(skill.filePath, 'utf8')),
-      };
-    } catch {
-      // unreadable: reported as not found
-    }
-  }
-  return resolved;
+  return new Map(skills.map((skill) => [skill.name, skill.filePath]));
 };
+
+export const skillResolver =
+  (files: Map<string, string>): NonNullable<LaunchContext['resolveSkill']> =>
+  (name) => {
+    const path = files.get(name);
+    let resolved: ResolvedSkill | undefined;
+    if (path) {
+      try {
+        resolved = {
+          path,
+          content: stripFrontmatter(readFileSync(path, 'utf8')),
+        };
+      } catch {
+        // unreadable: reported as not found
+      }
+    }
+    return resolved;
+  };
 
 export const buildLaunch = (
   def: AgentDefinition,
   ctx: LaunchContext,
 ): Launch => {
   const warnings: string[] = [];
-  const resolveSkill = ctx.resolveSkill ?? defaultResolveSkill;
+  const resolveSkill = ctx.resolveSkill ?? (() => undefined);
   const resolveMcp = ctx.resolveMcp ?? resolveMcpTools;
 
   let systemPrompt = def.prompt;

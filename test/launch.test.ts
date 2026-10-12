@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ParentContext } from 'pi-agent-runner';
 import { loadAgent, type AgentDefinition } from '../src/agents.ts';
-import { buildLaunch } from '../src/launch.ts';
+import { buildLaunch, skillResolver } from '../src/launch.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,4 +85,16 @@ test('skills are appended; a missing one warns', () => {
     'PROMPT\n\n<skill name="one">\nDo one.\n</skill>',
   );
   assert.deepEqual(warnings, ['skill gone not found']);
+});
+
+test('skillResolver reads the skill file without frontmatter', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-sk-'));
+  const file = join(dir, 'SKILL.md');
+  writeFileSync(file, '---\nname: one\ndescription: d\n---\nDo one.\n');
+  const resolve = skillResolver(new Map([['one', file]]));
+  assert.deepEqual(resolve('one', '/work'), {
+    path: file,
+    content: 'Do one.',
+  });
+  assert.equal(resolve('gone', '/work'), undefined);
 });
