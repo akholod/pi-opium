@@ -1,15 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import type {
+  ParentContext,
+  RunAgentOptions,
+  RunAgentResult,
+} from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { runCouncil, type Delegate } from '../src/council.ts';
+import { runCouncil } from '../src/council.ts';
 import { readState, writeState, DEFAULT_STATE } from '../src/state.ts';
-import type { DelegateOptions, DelegationResponse } from '../src/delegation.ts';
 
-const pi = {} as ExtensionAPI;
+const parent = {
+  events: { emit() {}, on: () => () => {} },
+  ctx: {},
+} as unknown as ParentContext;
+
+const agentsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents');
+const agentBody = (name: string): string =>
+  parseFrontmatter(
+    readFileSync(join(agentsDir, `${name}.md`), 'utf8'),
+  ).body.trim();
 
 test('orchestrator prompt lists the roster and drops disabled agents', () => {
   const full = buildOrchestratorPrompt();
@@ -43,57 +57,75 @@ test('state round-trips and defaults to on', () => {
   assert.deepEqual(readState(path), { orchestrator: false });
 });
 
-const fake = (answers: Record<string, DelegationResponse['status']> = {}) => {
-  const calls: DelegateOptions[] = [];
-  const delegateFn: Delegate = async (_pi, request) => {
-    calls.push(request);
-    const status = answers[request.agent] ?? 'completed';
-    if (status !== 'completed') return { requestId: 'r', status };
-    const responses = request.task
+// the councillor prompts are identical; the models tell the agents apart
+const agentOf = (model: string | undefined): string =>
+  ['councillor-alpha', 'councillor-beta', 'councillor-gamma', 'council'].find(
+    (name) =>
+      parseFrontmatter<{ model?: string }>(
+        readFileSync(join(agentsDir, `${name}.md`), 'utf8'),
+      ).frontmatter.model === model,
+  ) ?? 'unknown';
+
+const fake = (answers: Record<string, RunAgentResult['status']> = {}) => {
+  const calls: (RunAgentOptions & { agent: string })[] = [];
+  const runAgent = async (opts: RunAgentOptions): Promise<RunAgentResult> => {
+    const agent = agentOf(opts.model);
+    calls.push({ ...opts, agent });
+    const status = answers[agent] ?? 'completed';
+    const usage = {
+      input: 5,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0.01,
+      turns: 1,
+      toolCalls: 0,
+      durationMs: 1,
+      waitedMs: 0,
+    };
+    if (status !== 'completed') return { status, value: undefined, usage };
+    const responses = opts.task
       .split('# Councillor responses')[1]
       ?.replace(/\s+/g, ' ')
       .trim();
     const text =
-      request.agent === 'council'
+      agent === 'council'
         ? `## Council Response\nsynth of: ${responses}`
-        : `${request.agent} says hi`;
-    return {
-      requestId: 'r',
-      status: 'completed',
-      model: `m/${request.agent}`,
-      result: { kind: 'text', text },
-      usage: {
-        input: 5,
-        output: 1,
-        cacheRead: 0,
-        cacheWrite: 0,
-        cost: 0.01,
-        turns: 1,
-        toolCalls: 0,
-        durationMs: 1,
-      },
-    };
+        : `${agent} says hi`;
+    return { status, value: text, usage, model: `m/${agent}` };
   };
-  return { delegateFn, calls };
+  return { runAgent, calls };
 };
+
+const base = { parent, cwd: '/tmp', agentDirs: [agentsDir] };
 
 test('council: councillors in parallel, then synthesis', async () => {
   const f = fake();
   const result = await runCouncil({
-    pi,
-    cwd: '/tmp',
+    ...base,
     question: 'tabs or spaces?',
     context: 'see .editorconfig',
-    delegateFn: f.delegateFn,
+    runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'completed', result.error);
   assert.deepEqual(
     f.calls.map((c) => c.agent),
     ['councillor-alpha', 'councillor-beta', 'councillor-gamma', 'council'],
   );
-  // one owner, distinct nodes
-  assert.equal(new Set(f.calls.map((c) => c.ownerRunId)).size, 1);
-  assert.equal(new Set(f.calls.map((c) => c.nodeId)).size, 4);
+  for (const [index, call] of f.calls.entries()) {
+    assert.equal(call.parent, parent);
+    assert.equal(call.extensions, 'none');
+    assert.deepEqual(
+      call.tools,
+      index < 3 ? ['read', 'grep', 'find', 'ls'] : [],
+    );
+  }
+  for (const call of f.calls) {
+    assert.equal(call.systemPrompt, agentBody(call.agent));
+  }
+  assert.equal(f.calls[0].model, 'openai-codex/gpt-6-luna');
+  assert.equal(f.calls[0].thinking, 'high');
+  assert.equal(f.calls[0].timeoutMs, 900000);
   assert.match(f.calls[0].task, /see \.editorconfig/);
   const synthesisTask = f.calls[3].task;
   assert.match(synthesisTask, /## Councillor alpha \(m\/councillor-alpha\)/);
@@ -106,10 +138,9 @@ test('council: councillors in parallel, then synthesis', async () => {
 test('council: a failed seat is reported, synthesis still runs', async () => {
   const f = fake({ 'councillor-beta': 'timed_out' });
   const result = await runCouncil({
-    pi,
-    cwd: '/tmp',
+    ...base,
     question: 'q',
-    delegateFn: f.delegateFn,
+    runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'completed', result.error);
   assert.equal(result.seats[1].ok, false);
@@ -123,20 +154,52 @@ test('council: all seats failed -> failed; cancelled -> aborted', async () => {
     'councillor-gamma': 'timed_out',
   });
   const failed = await runCouncil({
-    pi,
-    cwd: '/tmp',
+    ...base,
     question: 'q',
-    delegateFn: dead.delegateFn,
+    runAgent: dead.runAgent,
   });
   assert.equal(failed.outcome, 'failed');
   assert.equal(dead.calls.length, 3);
 
   const cancelled = fake({ 'councillor-gamma': 'cancelled' });
   const aborted = await runCouncil({
-    pi,
-    cwd: '/tmp',
+    ...base,
     question: 'q',
-    delegateFn: cancelled.delegateFn,
+    runAgent: cancelled.runAgent,
   });
   assert.equal(aborted.outcome, 'aborted');
+});
+
+test('council: explicit timeoutMs overrides the agent file', async () => {
+  const f = fake();
+  await runCouncil({
+    ...base,
+    question: 'q',
+    timeoutMs: 1234,
+    runAgent: f.runAgent,
+  });
+  assert.ok(f.calls.every((c) => c.timeoutMs === 1234));
+});
+
+test('council: an invalid agent file fails and names the file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-agents-'));
+  for (const name of ['alpha', 'beta', 'gamma']) {
+    writeFileSync(join(dir, `councillor-${name}.md`), 'prompt\n');
+  }
+  writeFileSync(
+    join(dir, 'councillor-alpha.md'),
+    '---\nthinking: ludicrous\n---\nprompt\n',
+  );
+  writeFileSync(join(dir, 'council.md'), 'prompt\n');
+  const f = fake();
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [dir],
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.error ?? '', /councillor-alpha\.md.*thinking/);
+  assert.equal(f.calls.length, 0);
 });

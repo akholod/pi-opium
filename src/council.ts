@@ -1,10 +1,19 @@
 // Multi-model council (oh-my-opencode-slim): councillors answer the same
 // question independently and in parallel, then the council agent
-// synthesizes a structured report. Runs through the pi-subagents
-// delegation contract; seats are the user agents `councillor-<seat>`.
+// synthesizes a structured report. Runs in-process through
+// pi-agent-runner; seats are the agents `councillor-<seat>` (agents/*.md).
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { delegate, type DelegationResponse } from './delegation.ts';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import {
+  runAgent,
+  type ParentContext,
+  type RunAgentResult,
+  type RunStatus,
+  type ThinkingLevel,
+} from 'pi-agent-runner';
 
 export const SEATS = ['alpha', 'beta', 'gamma'] as const;
 export type Seat = (typeof SEATS)[number];
@@ -12,26 +21,104 @@ export type Seat = (typeof SEATS)[number];
 export const COUNCIL_AGENT = 'council';
 export const councillorAgent = (seat: Seat): string => `councillor-${seat}`;
 
-export type Delegate = typeof delegate;
+const THINKING_LEVELS: readonly string[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+];
+
+const PACKAGE_AGENTS_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'agents',
+);
+
+export interface CouncilAgent {
+  name: string;
+  prompt: string;
+  model?: string;
+  thinking?: ThinkingLevel;
+  timeoutMs?: number;
+}
+
+// Directories searched in order: the user override, then the package.
+export const defaultAgentDirs = (): string[] => [
+  join(getAgentDir(), 'agents'),
+  PACKAGE_AGENTS_DIR,
+];
+
+export const loadCouncilAgent = (
+  name: string,
+  dirs: readonly string[] = defaultAgentDirs(),
+): CouncilAgent => {
+  let file: string | undefined;
+  let raw = '';
+  for (const dir of dirs) {
+    const candidate = join(dir, `${name}.md`);
+    try {
+      raw = readFileSync(candidate, 'utf8');
+      file = candidate;
+      break;
+    } catch {
+      // try the next directory
+    }
+  }
+  if (!file) {
+    throw new Error(`agent file ${name}.md not found in ${dirs.join(', ')}`);
+  }
+  const { frontmatter, body } = parseFrontmatter<Record<string, unknown>>(raw);
+  const agent: CouncilAgent = { name, prompt: body.trim() };
+  const { model, thinking, timeoutMs } = frontmatter;
+  if (model !== undefined) {
+    if (typeof model !== 'string' || !model.trim()) {
+      throw new Error(`${file}: model must be a non-empty string`);
+    }
+    agent.model = model.trim();
+  }
+  if (thinking !== undefined) {
+    if (typeof thinking !== 'string' || !THINKING_LEVELS.includes(thinking)) {
+      throw new Error(
+        `${file}: thinking must be one of ${THINKING_LEVELS.join('|')}`,
+      );
+    }
+    agent.thinking = thinking as ThinkingLevel;
+  }
+  if (timeoutMs !== undefined) {
+    if (typeof timeoutMs !== 'number' || !(timeoutMs > 0)) {
+      throw new Error(`${file}: timeoutMs must be a positive number`);
+    }
+    agent.timeoutMs = timeoutMs;
+  }
+  return agent;
+};
+
+const SEAT_TOOLS = ['read', 'grep', 'find', 'ls'];
 
 export interface CouncilOptions {
-  pi: ExtensionAPI;
+  parent: ParentContext;
   cwd: string;
   question: string;
   // extra context the caller already has (paths, constraints)
   context?: string;
   seats?: readonly Seat[];
+  // explicit override; else the agent file's timeoutMs; else 900s
   timeoutMs?: number;
   signal?: AbortSignal;
   onProgress?: (message: string) => void;
-  delegateFn?: Delegate;
+  // test seams
+  runAgent?: typeof runAgent;
+  agentDirs?: readonly string[];
 }
 
 export interface SeatResult {
   seat: Seat;
   agent: string;
   model?: string;
-  status: DelegationResponse['status'];
+  status: RunStatus;
   // answer text, or the failure reason
   text: string;
   ok: boolean;
@@ -56,13 +143,12 @@ export interface CouncilResult {
 
 const DEFAULT_TIMEOUT_MS = 900_000;
 
-const failureText = (response: DelegationResponse): string =>
+const failureText = (response: RunAgentResult): string =>
   response.status + (response.error ? `: ${response.error}` : '');
 
-const usageOf = (responses: DelegationResponse[]): CouncilUsage => {
+const usageOf = (responses: RunAgentResult[]): CouncilUsage => {
   const usage: CouncilUsage = { cost: 0, input: 0, output: 0, runs: 0 };
   for (const response of responses) {
-    if (!response.usage) continue;
     usage.cost += response.usage.cost;
     usage.input += response.usage.input;
     usage.output += response.usage.output;
@@ -110,16 +196,12 @@ export const buildCouncilTask = (
     'Per-Councillor Details (by seat name), Council Summary.',
   ].join('\n');
 
-const CANCELLED = new Set(['cancelled', 'interrupted']);
-
 export const runCouncil = async (
   options: CouncilOptions,
 ): Promise<CouncilResult> => {
-  const run = options.delegateFn ?? delegate;
+  const run = options.runAgent ?? runAgent;
   const seats = options.seats ?? SEATS;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const ownerRunId = crypto.randomUUID();
-  const responses: DelegationResponse[] = [];
+  const responses: RunAgentResult[] = [];
   const result = (
     outcome: CouncilResult['outcome'],
     seatResults: SeatResult[],
@@ -133,51 +215,69 @@ export const runCouncil = async (
     usage: usageOf(responses),
     ...(error ? { error } : {}),
   });
+  const errorText = (error: unknown): string =>
+    error instanceof Error ? error.message : String(error);
+
+  let seatAgents: CouncilAgent[];
+  let synthesizer: CouncilAgent;
+  try {
+    seatAgents = seats.map((seat) =>
+      loadCouncilAgent(councillorAgent(seat), options.agentDirs),
+    );
+    synthesizer = loadCouncilAgent(COUNCIL_AGENT, options.agentDirs);
+  } catch (error) {
+    return result('failed', [], '', errorText(error));
+  }
+  const start = (agent: CouncilAgent, task: string, tools: string[]) =>
+    run({
+      parent: options.parent,
+      cwd: options.cwd,
+      systemPrompt: agent.prompt,
+      task,
+      tools,
+      model: agent.model ?? 'inherit',
+      thinking: agent.thinking,
+      extensions: 'none',
+      result: { kind: 'text' },
+      timeoutMs: options.timeoutMs ?? agent.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      signal: options.signal,
+    });
 
   options.onProgress?.(`council: asking ${seats.join(', ')} in parallel`);
   let seatResults: SeatResult[];
   try {
     const answers = await Promise.all(
-      seats.map((seat) =>
-        run(options.pi, {
-          ownerRunId,
-          nodeId: `council-${seat}`,
-          agent: councillorAgent(seat),
-          task: buildCouncillorTask(options.question, options.context),
-          cwd: options.cwd,
-          timeoutMs,
-          result: { kind: 'text' },
-          signal: options.signal,
-        }),
+      seatAgents.map((agent) =>
+        start(
+          agent,
+          buildCouncillorTask(options.question, options.context),
+          SEAT_TOOLS,
+        ),
       ),
     );
     responses.push(...answers);
     seatResults = seats.map((seat, index) => {
       const response = answers[index];
       const ok =
-        response.status === 'completed' && response.result?.kind === 'text';
+        response.status === 'completed' && typeof response.value === 'string';
       return {
         seat,
         agent: councillorAgent(seat),
         model: response.model,
         status: response.status,
-        text:
-          ok && response.result?.kind === 'text'
-            ? response.result.text.trim()
-            : failureText(response),
+        text: ok ? (response.value as string).trim() : failureText(response),
         ok,
       };
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return result('failed', [], '', message);
+    return result('failed', [], '', errorText(error));
   }
   for (const seat of seatResults) {
     options.onProgress?.(`council: ${seat.seat} ${seat.status}`);
   }
   if (
     options.signal?.aborted ||
-    seatResults.some((s) => CANCELLED.has(s.status))
+    seatResults.some((s) => s.status === 'cancelled')
   ) {
     return result('aborted', seatResults, '');
   }
@@ -186,27 +286,21 @@ export const runCouncil = async (
   }
 
   options.onProgress?.('council: synthesizing');
-  let synthesis: DelegationResponse;
+  let synthesis: RunAgentResult;
   try {
-    synthesis = await run(options.pi, {
-      ownerRunId,
-      nodeId: 'council-synthesis',
-      agent: COUNCIL_AGENT,
-      task: buildCouncilTask(options.question, options.context, seatResults),
-      cwd: options.cwd,
-      timeoutMs,
-      result: { kind: 'text' },
-      signal: options.signal,
-    });
+    synthesis = await start(
+      synthesizer,
+      buildCouncilTask(options.question, options.context, seatResults),
+      [],
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return result('failed', seatResults, '', message);
+    return result('failed', seatResults, '', errorText(error));
   }
   responses.push(synthesis);
-  if (CANCELLED.has(synthesis.status)) {
+  if (synthesis.status === 'cancelled') {
     return result('aborted', seatResults, '');
   }
-  if (synthesis.status !== 'completed' || synthesis.result?.kind !== 'text') {
+  if (synthesis.status !== 'completed' || typeof synthesis.value !== 'string') {
     return result(
       'failed',
       seatResults,
@@ -214,7 +308,7 @@ export const runCouncil = async (
       `council synthesis ${failureText(synthesis)}`,
     );
   }
-  return result('completed', seatResults, synthesis.result.text.trim());
+  return result('completed', seatResults, synthesis.value.trim());
 };
 
 // Fallback rendering when synthesis failed but councillors answered.

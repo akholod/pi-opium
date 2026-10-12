@@ -3,13 +3,15 @@
 //     /orchestrator on|off|status; persisted in ~/.pi/agent/opium.json)
 //   - /council <question> and the `council` tool: three councillors on
 //     different models in parallel, then a synthesized report
-// Specialist agents live in ~/.pi/agent/agents/*.md (pi-subagents).
+// Specialist agents live in ~/.pi/agent/agents/*.md (pi-subagents);
+// the council runs in-process through pi-agent-runner.
 
 import { Type } from 'typebox';
 import {
   CONFIG_DIR_NAME,
   type ExtensionAPI,
 } from '@earendil-works/pi-coding-agent';
+import { humanWaitTracker } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import { readState, statePath, writeState } from '../src/state.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
@@ -40,6 +42,8 @@ const renderCouncil = (result: CouncilResult): string => {
 
 export default function opiumExtension(pi: ExtensionAPI) {
   const path = statePath(CONFIG_DIR_NAME);
+  // watch permission dialogs from the start so a run never misses one
+  humanWaitTracker(pi.events);
   let state = readState(path);
   const prompt = buildOrchestratorPrompt();
   // Background pi-subagents children load ambient extensions too; a
@@ -80,7 +84,7 @@ export default function opiumExtension(pi: ExtensionAPI) {
       }
       ctx.ui.notify('[council] convening alpha, beta, gamma', 'info');
       const result = await runCouncil({
-        pi,
+        parent: { events: pi.events, ctx },
         cwd: ctx.cwd,
         question,
         signal: ctx.signal,
@@ -133,7 +137,7 @@ export default function opiumExtension(pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       const result = await runCouncil({
-        pi,
+        parent: { events: pi.events, ctx },
         cwd: ctx.cwd,
         question: params.question,
         context: params.context,
