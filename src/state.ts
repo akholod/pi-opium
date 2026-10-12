@@ -29,6 +29,40 @@ export const readState = (path: string): CrewState => {
   }
 };
 
+export interface WakeSettings {
+  enabled: boolean;
+  intervalMs: number;
+}
+
+export const DEFAULT_WAKE: WakeSettings = {
+  enabled: true,
+  intervalMs: 300_000,
+};
+
+// `wake: { enabled?, intervalMs? }` in the same file; invalid values fall
+// back to the defaults.
+export const readWakeSettings = (path: string): WakeSettings => {
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
+      wake?: { enabled?: unknown; intervalMs?: unknown };
+    } | null;
+    const wake = raw?.wake;
+    if (typeof wake !== 'object' || wake === null) return DEFAULT_WAKE;
+    const { enabled, intervalMs } = wake;
+    return {
+      enabled: typeof enabled === 'boolean' ? enabled : DEFAULT_WAKE.enabled,
+      intervalMs:
+        typeof intervalMs === 'number' &&
+        Number.isFinite(intervalMs) &&
+        intervalMs > 0
+          ? intervalMs
+          : DEFAULT_WAKE.intervalMs,
+    };
+  } catch {
+    return DEFAULT_WAKE;
+  }
+};
+
 // Keeps other keys already in the file (e.g. per-agent `agents` overrides).
 export const writeState = (path: string, state: CrewState): void => {
   let existing: Record<string, unknown> = {};

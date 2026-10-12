@@ -18,15 +18,27 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { humanWaitTracker } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { readState, statePath, writeState } from '../src/state.ts';
+import {
+  readState,
+  readWakeSettings,
+  statePath,
+  writeState,
+} from '../src/state.ts';
 import { readAgentOverrides } from '../src/agents.ts';
-import { RunRegistry, defaultStarter, type Starter } from '../src/runs.ts';
+import {
+  RunRegistry,
+  defaultStarter,
+  type RunRecord,
+  type Starter,
+} from '../src/runs.ts';
 import { createDelivery, type Delivery } from '../src/delivery.ts';
 import {
   defaultAgentNames,
   defaultLoadDef,
   registerAgentTools,
 } from '../src/tools.ts';
+import { boardFingerprint, formatBoard } from '../src/board.ts';
+import { createWake, type Wake } from '../src/wake.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
@@ -61,7 +73,15 @@ export interface OpiumDeps {
   starter?: Starter;
   // run metadata and transcripts; defaults to ~/.pi/agent/opium/runs
   runsDir?: string;
+  // idle-wake timing; tests inject fake timers
+  wake?: {
+    intervalMs?: number;
+    setTimer?: (fn: () => void, ms: number) => unknown;
+    clearTimer?: (handle: unknown) => void;
+  };
 }
+
+const WAIT_REASON_LIMIT = 500;
 
 export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   const path = statePath(CONFIG_DIR_NAME);
@@ -111,10 +131,64 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     registry = created;
     return created;
   };
+  const wakeSettings = readWakeSettings(path);
+  const isActive = (run: RunRecord): boolean =>
+    run.state === 'starting' || run.state === 'running';
+  // fingerprint of the job board last injected into the context
+  let lastBoard = '';
+  const newWake = (): Wake =>
+    createWake({
+      intervalMs: deps.wake?.intervalMs ?? wakeSettings.intervalMs,
+      setTimer: deps.wake?.setTimer,
+      clearTimer: deps.wake?.clearTimer,
+      snapshot: () => {
+        const runs = registry?.list() ?? [];
+        return {
+          active:
+            !isSubagentChild &&
+            state.orchestrator &&
+            runs.some((run) => isActive(run) || run.unread),
+          fingerprint: boardFingerprint(runs),
+        };
+      },
+      // before_agent_start fires only for user prompts, so a wake turn
+      // carries the board itself
+      send: (text) => {
+        const runs = registry?.list() ?? [];
+        const now = Date.now();
+        const board = formatBoard(runs, now);
+        if (board !== undefined) lastBoard = boardFingerprint(runs, now);
+        pi.sendMessage(
+          {
+            customType: 'opium-wake',
+            content: board === undefined ? text : `${text}\n\n${board}`,
+            display: false,
+          },
+          { triggerTurn: true },
+        );
+      },
+    });
+  let wake = newWake();
   pi.on('session_start', (_event, ctx) => {
     latestCtx = ctx;
+    wake.stop();
+    wake = newWake();
+    lastBoard = '';
+  });
+  pi.on('agent_start', () => {
+    wake.busy();
+  });
+  pi.on('agent_settled', (event) => {
+    if (event.aborted || !wakeSettings.enabled) return;
+    if (isSubagentChild || !state.orchestrator) return;
+    wake.settled();
+  });
+  pi.on('input', (event) => {
+    if (event.source !== 'extension') wake.userInput();
+    return undefined;
   });
   pi.on('session_shutdown', async () => {
+    wake.stop();
     const current = registry;
     registry = undefined;
     latestCtx = undefined;
@@ -131,8 +205,78 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   }));
 
   pi.on('before_agent_start', (event) => {
-    if (isSubagentChild || !state.orchestrator) return;
+    if (isSubagentChild || !state.orchestrator) return {};
     event.systemPromptOptions.sections[SECTION] = prompt;
+    const runs = registry?.list() ?? [];
+    const now = Date.now();
+    const board = formatBoard(runs, now);
+    const fingerprint = board === undefined ? '' : boardFingerprint(runs, now);
+    if (board === undefined || fingerprint === lastBoard) {
+      lastBoard = fingerprint;
+      return {};
+    }
+    lastBoard = fingerprint;
+    return {
+      message: {
+        customType: 'opium-job-board',
+        content: board,
+        display: false,
+      },
+    };
+  });
+
+  pi.registerTool({
+    name: 'wait_for_user',
+    label: 'Wait for user',
+    description:
+      'Pause automatic continuation while waiting for external human ' +
+      'action. Final tool action only, after giving the user concrete ' +
+      'manual steps; the next user message resumes continuation. For an ' +
+      'immediate answer or choice, use a question tool instead. Not for ' +
+      'awaiting background agents: their results are delivered ' +
+      'automatically.',
+    promptSnippet: 'Pause and wait for a manual step by the user',
+    parameters: Type.Object({
+      reason: Type.String({
+        minLength: 1,
+        maxLength: WAIT_REASON_LIMIT,
+        description: 'Short description of the external human action awaited',
+      }),
+    }),
+    async execute(_id, params) {
+      const reason = params.reason.replace(/\s+/g, ' ').trim();
+      if (!reason) {
+        throw new Error('wait_for_user requires a non-empty reason');
+      }
+      if (isSubagentChild || !state.orchestrator) {
+        throw new Error(
+          'wait_for_user can only be used in an orchestrator session',
+        );
+      }
+      const busy = (registry?.list() ?? []).some(isActive);
+      if (!busy) wake.waitForUser();
+      const text = busy
+        ? [
+            'state: waiting_for_user_skipped',
+            `reason: ${reason}`,
+            '',
+            'Background agents are still running. Do not block on manual ' +
+              'input — end this turn now; results are delivered automatically.',
+          ]
+        : [
+            'state: waiting_for_user',
+            `reason: ${reason}`,
+            '',
+            'End this turn now. Do not call more tools until the user ' +
+              'responds.',
+          ];
+      return {
+        content: [{ type: 'text' as const, text: text.join('\n') }],
+        details: {
+          state: busy ? 'waiting_for_user_skipped' : 'waiting_for_user',
+        },
+      };
+    },
   });
 
   pi.registerCommand('orchestrator', {

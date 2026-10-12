@@ -55,7 +55,9 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
   assert.ok(!full.includes('subagent('));
   assert.ok(!full.includes('pi-subagents'));
   assert.match(full, /do not call or enable them/);
-  assert.ok(!full.includes('bg_wait'));
+  // other extensions' background-task tools are named only as blind to runs
+  assert.equal(full.split('bg_wait').length, 2);
+  assert.match(full, /`bg_wait`, `bg_status`\) do not see agent runs/);
   assert.ok(!full.includes('fork'));
   assert.ok(!full.includes('ralplan'));
   assert.ok(!full.includes('ralph'));
