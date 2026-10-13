@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { ParentContext } from 'pi-agent-runner';
 import { loadAgent, type AgentDefinition } from '../src/agents.ts';
 import { buildLaunch, skillResolver } from '../src/launch.ts';
+import { toolGuards } from '../src/guards.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +28,7 @@ test('defaults: no tools, no extensions, no context files', () => {
   assert.equal(start.model, 'inherit');
   assert.equal(start.permissionAsks, 'forward');
   assert.equal(start.gitGuard, true);
+  assert.deepEqual(start.extensionFactories, [toolGuards]);
   assert.equal(start.cwd, '/work');
   assert.equal(start.parent, parent);
   assert.deepEqual(turn, {});

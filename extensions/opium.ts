@@ -40,6 +40,7 @@ import {
 import { boardFingerprint, formatBoard } from '../src/board.ts';
 import { injectReminders } from '../src/reminders.ts';
 import { createWake, type Wake } from '../src/wake.ts';
+import { toolGuards } from '../src/guards.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
@@ -88,6 +89,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   const path = statePath(CONFIG_DIR_NAME);
   // watch permission dialogs from the start so a run never misses one
   humanWaitTracker(pi.events);
+  // slim guards every session, whether or not the orchestrator is on
+  toolGuards(pi);
   let state = readState(path);
   // the roster names only agents the `agent` tool can call
   const prompt = buildOrchestratorPrompt({ available: defaultAgentNames() });

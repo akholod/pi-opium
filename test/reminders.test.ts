@@ -146,12 +146,14 @@ const setup = (orchestrator: boolean) => {
 
 test('context handler injects when orchestrator is on', async () => {
   const run = setup(true);
-  const [result] = await run([user('hello')]);
+  // the guards' context handler is registered first
+  const result = (await run([user('hello')])).at(-1)!;
   assert.deepEqual(texts(result.messages![0]), ['hello', PHASE_REMINDER]);
 });
 
 test('context handler does nothing when orchestrator is off', async () => {
   const run = setup(false);
-  const [result] = await run([user('hello')]);
+  // the guards' context handler is registered first
+  const result = (await run([user('hello')])).at(-1)!;
   assert.equal(result.messages, undefined);
 });
