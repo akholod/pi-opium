@@ -184,6 +184,7 @@ Balance: respect dependencies, avoid parallelizing what must be sequential, avoi
 
 ### Background run discipline
 - Launch a specialist with \`agent({ agent: "<name>", task: "..." })\`. explorer, librarian, oracle, designer, fixer and fast-generic run in the background by default and return a run id at once; observer runs in the foreground and returns its answer in the tool result. Pass \`background\` only to override that. The council is the separate \`council\` tool.
+- \`opium_preset\` switches the per-agent model preset and only affects runs started afterwards; call it only when the user asks to switch models.
 - Delegate only through these \`agent*\` tools. Delegation tools from other extensions (for example \`subagent\` or \`subagents_enable\`) do not know these specialists; do not call or enable them. Background-task tools from other extensions (for example \`bg_wait\`, \`bg_status\`) do not see agent runs either.
 - A specialist starts with a fresh context: it sees only its task, not this conversation. Put the goal, paths and lines, constraints and the expected output into the task.
 - A background run's result is delivered to you automatically when it finishes, once per run; you do not need to poll. After launching all independent background runs and any remaining non-overlapping work, end the turn with a brief status line.

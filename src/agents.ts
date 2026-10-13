@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getAgentDir, parseFrontmatter } from '@earendil-works/pi-coding-agent';
 import type { ThinkingLevel } from 'pi-agent-runner';
+import { resolvePreset } from './presets.ts';
 
 export type PermissionAsks = 'forward' | 'deny';
 
@@ -387,7 +388,7 @@ const readJson = (
   return result;
 };
 
-const parseOverride = (
+export const parseOverride = (
   path: string,
   agent: string,
   value: unknown,
@@ -427,8 +428,9 @@ const parseOverride = (
   return out;
 };
 
-// opium.json `agents` wins per field over settings.json
-// `subagents.agentOverrides` (which only contributes model and thinking).
+// Per field, lowest to highest: settings.json `subagents.agentOverrides`
+// (model and thinking only) < the active opium.json preset < opium.json
+// `agents`.
 export const readAgentOverrides = (
   opiumPath: string,
   settingsPath: string,
@@ -460,6 +462,17 @@ export const readAgentOverrides = (
   }
 
   const opium = readJson(opiumPath, errors);
+  if (opium?.preset !== undefined) {
+    if (typeof opium.preset === 'string') {
+      const resolved = resolvePreset(opium, opium.preset, opiumPath);
+      errors.push(...resolved.errors);
+      for (const [agent, value] of Object.entries(resolved.overrides)) {
+        overrides[agent] = { ...overrides[agent], ...value };
+      }
+    } else {
+      errors.push(`${opiumPath}: preset must be a string`);
+    }
+  }
   const fromOpium = opium?.agents;
   if (fromOpium !== undefined) {
     if (isRecord(fromOpium)) {

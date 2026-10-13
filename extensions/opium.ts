@@ -42,12 +42,15 @@ import { injectReminders } from '../src/reminders.ts';
 import { createWake, type Wake } from '../src/wake.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
+import { applyPresetCommand } from '../src/presets.ts';
 import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
 
+const settingsFile = () => join(getAgentDir(), 'settings.json');
+
 const agentOverrides = (path: string) =>
-  readAgentOverrides(path, join(getAgentDir(), 'settings.json'));
+  readAgentOverrides(path, settingsFile());
 
 const formatUsage = ({ usage }: CouncilResult): string => {
   const tokens = usage.input + usage.output;
@@ -305,6 +308,40 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
       }
       const mode = state.orchestrator ? 'ON' : 'OFF';
       ctx.ui.notify(`[opium] orchestrator prompt is ${mode} (${path})`, 'info');
+    },
+  });
+
+  pi.registerCommand('opium-preset', {
+    description:
+      'Switch the per-agent model preset for new runs: ' +
+      '/opium-preset [name|off] (no argument lists presets)',
+    handler: async (args, ctx) => {
+      const reply = applyPresetCommand(path, settingsFile(), args);
+      ctx.ui.notify(`[opium] ${reply.text}`, reply.error ? 'error' : 'info');
+    },
+  });
+
+  pi.registerTool({
+    name: 'opium_preset',
+    label: 'Opium preset',
+    description:
+      'Switch the per-agent model preset for new agent runs; list the ' +
+      'presets when no name is given. "off" clears the active preset. ' +
+      'Runs already started keep their model.',
+    promptSnippet: 'Switch the model preset for new agent runs',
+    parameters: Type.Object({
+      name: Type.Optional(
+        Type.String({ description: 'Preset name, or "off"; omit to list' }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      const reply = applyPresetCommand(path, settingsFile(), params.name);
+      // pi treats a tool call as failed only when execute throws
+      if (reply.error) throw new Error(reply.text);
+      return {
+        content: [{ type: 'text' as const, text: reply.text }],
+        details: {},
+      };
     },
   });
 
