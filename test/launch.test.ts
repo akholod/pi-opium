@@ -29,6 +29,7 @@ test('defaults: no tools, no extensions, no context files', () => {
   assert.equal(start.permissionAsks, 'forward');
   assert.equal(start.gitGuard, true);
   assert.equal(start.extensionFactories, sessionGuards);
+  assert.deepEqual(start.label, { name: 'a', context: 'opium' });
   assert.equal(start.cwd, '/work');
   assert.equal(start.parent, parent);
   assert.deepEqual(turn, {});

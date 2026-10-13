@@ -114,6 +114,7 @@ export const buildLaunch = (
   const start: Launch['start'] = {
     parent: ctx.parent,
     cwd: ctx.cwd,
+    label: { name: def.name, context: 'opium' },
     systemPrompt,
     model: def.models[0],
     extensions: def.packages.length ? { packages: def.packages } : 'none',

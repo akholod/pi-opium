@@ -3,6 +3,7 @@
 // pure over injected dependencies; registerAgentTools wires them into Pi.
 
 import { join } from 'node:path';
+import { isPossiblyStuck } from 'pi-agent-runner';
 import { Type } from 'typebox';
 import {
   CONFIG_DIR_NAME,
@@ -17,6 +18,7 @@ import {
   type AgentDefinition,
 } from './agents.ts';
 import { RunRefusal, type RunRegistry, type RunRecord } from './runs.ts';
+import { defaultLive, type LiveLookup } from './live.ts';
 import { statePath } from './state.ts';
 
 export interface ToolDeps {
@@ -27,6 +29,8 @@ export interface ToolDeps {
   agentNames: () => string[];
   cwd: string;
   now?: () => number;
+  // live activity of a retained run; the runner's registry by default
+  live?: LiveLookup;
 }
 
 export interface ToolOutput {
@@ -275,6 +279,24 @@ export const agentStatus = (
       )}`,
     `objective: ${truncate(run.objective, OBJECTIVE_LIMIT)}`,
   ];
+  const lookup = deps.live ?? defaultLive;
+  const activity = isTerminal(run) ? undefined : lookup(run);
+  if (activity) {
+    if (activity.currentTool) lines.push(`tool: ${activity.currentTool}`);
+    lines.push(
+      `last activity: ${seconds(now - activity.lastActivityAt)} ago`,
+      `turns ${activity.turns}, tool calls ${activity.toolCalls}, ` +
+        `tokens ${activity.tokens.input + activity.tokens.output}, ` +
+        `$${activity.cost.toFixed(4)}`,
+    );
+    if (isPossiblyStuck(activity, now)) {
+      lines.push(
+        `possibly stuck: no completed step for ${seconds(
+          now - (activity.lastStepAt ?? activity.startedAt),
+        )}; check with agent_message or cancel/revive if justified`,
+      );
+    }
+  }
   const error = run.error ?? run.result?.error;
   if (error) lines.push(`error: ${error}`);
   if (run.warnings.length) lines.push(`warnings: ${run.warnings.join('; ')}`);

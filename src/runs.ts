@@ -39,6 +39,8 @@ export interface RunRecord {
   warnings: string[];
   // a live handle is held
   retained: boolean;
+  // the retained child session's id, key into the runner's live registry
+  sessionId?: string;
   transcriptPath: string;
   startedAt: number;
   endedAt?: number;
@@ -398,6 +400,7 @@ export class RunRegistry {
       return this.finish(entry, 'cancelled', undefined, 'shutting down');
     }
     entry.handle = started.handle;
+    run.sessionId = started.handle.sessionId;
     run.retained = true;
     if (entry.cancelRequested) {
       return this.finish(entry, 'cancelled', undefined, 'cancelled');

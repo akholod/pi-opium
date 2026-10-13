@@ -256,6 +256,7 @@ export const runCouncil = async (
     run({
       parent: options.parent,
       cwd: options.cwd,
+      label: { name: agent.name, context: 'council' },
       systemPrompt: agent.prompt,
       task,
       tools,

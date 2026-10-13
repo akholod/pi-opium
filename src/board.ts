@@ -1,6 +1,7 @@
 // Background Job Board: a compact digest of the run registry injected into
 // the orchestrator's context when it changes. Pure over run records.
 
+import { defaultLive, stuck, type LiveLookup } from './live.ts';
 import type { RunRecord } from './runs.ts';
 
 const TEXT_LIMIT = 100;
@@ -52,6 +53,7 @@ const unreadLine = (run: RunRecord): string => {
 export const formatBoard = (
   runs: RunRecord[],
   now: number,
+  live: LiveLookup = defaultLive,
 ): string | undefined => {
   const { running, unread, revivable } = sections(runs, now);
   const blocks: string[] = [];
@@ -63,7 +65,9 @@ export const formatBoard = (
           (run) =>
             `- ${run.id} ${run.agent} ${run.state} ${age(
               now - run.startedAt,
-            )} — ${truncate(run.objective, TEXT_LIMIT)}`,
+            )} — ${truncate(run.objective, TEXT_LIMIT)}${
+              stuck(live, run, now) ? ' (possibly stuck)' : ''
+            }`,
         ),
       ].join('\n'),
     );
@@ -96,6 +100,7 @@ export const formatBoard = (
 export const boardFingerprint = (
   runs: RunRecord[],
   now: number = Date.now(),
+  live: LiveLookup = defaultLive,
 ): string => {
   const { running, unread, revivable } = sections(runs, now);
   return [...running, ...unread, ...revivable]
@@ -106,6 +111,7 @@ export const boardFingerprint = (
         run.generation,
         Number(run.unread),
         Number(run.retained),
+        Number(stuck(live, run, now)),
       ].join(':'),
     )
     .join('|');

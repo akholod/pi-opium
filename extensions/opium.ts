@@ -16,7 +16,7 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import { humanWaitTracker } from 'pi-agent-runner';
+import { humanWaitTracker, mountRunsView } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import {
   readState,
@@ -109,6 +109,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   let registry: RunRegistry | undefined;
   let delivery: Delivery | undefined;
   let latestCtx: ExtensionContext | undefined;
+  // shared live list of child runs (Spiral and Opium) above the editor
+  let runsView: { dispose(): void } | undefined;
   const getRegistry = (ctx: ExtensionContext): RunRegistry => {
     latestCtx = ctx;
     if (registry) return registry;
@@ -183,6 +185,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     wake.stop();
     wake = newWake();
     lastBoard = '';
+    runsView?.dispose();
+    runsView = isSubagentChild ? undefined : mountRunsView(ctx);
   });
   pi.on('agent_start', () => {
     wake.busy();
@@ -198,6 +202,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   });
   pi.on('session_shutdown', async () => {
     wake.stop();
+    runsView?.dispose();
+    runsView = undefined;
     const current = registry;
     registry = undefined;
     latestCtx = undefined;

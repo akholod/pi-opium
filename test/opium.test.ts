@@ -157,6 +157,7 @@ test('council: councillors in parallel, then synthesis', async () => {
   for (const [index, call] of f.calls.entries()) {
     assert.equal(call.parent, parent);
     assert.equal(call.extensions, 'none');
+    assert.deepEqual(call.label, { name: call.agent, context: 'council' });
     assert.deepEqual(
       call.tools,
       index < 3 ? ['read', 'grep', 'find', 'ls'] : [],
