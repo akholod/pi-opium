@@ -8,7 +8,7 @@ import {
   type AgentDefinition,
   type AgentOverrides,
 } from './agents.ts';
-import { toolGuards } from './guards.ts';
+import { sessionGuards } from './guards.ts';
 import {
   runAgent,
   type ParentContext,
@@ -262,7 +262,7 @@ export const runCouncil = async (
       model,
       thinking: agent.thinking,
       extensions: 'none',
-      extensionFactories: [toolGuards],
+      extensionFactories: sessionGuards,
       result: { kind: 'text' },
       timeoutMs: options.timeoutMs ?? agent.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       signal: options.signal,

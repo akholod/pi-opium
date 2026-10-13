@@ -16,6 +16,7 @@ import type {
   ExtensionAPI,
   ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
+import { pathGuards } from './paths.ts';
 
 /* eslint-disable max-len, consistent-return */
 // max-len: model-facing texts keep slim's wording on single lines.
@@ -141,6 +142,8 @@ export const remindJsonErrors = <M extends object>(
 ): M[] | undefined => {
   let changed = false;
   const out = messages.map((message) => {
+    // SAFETY: only reads optional fields and checks each before use; any
+    // message without them is returned unchanged.
     const m = message as unknown as {
       role?: string;
       toolName?: string;
@@ -355,3 +358,7 @@ export const toolGuards: ExtensionFactory = (pi: ExtensionAPI): void => {
     };
   });
 };
+
+// Every guard Opium loads into a session: the parent, each child agent and
+// each council seat. Path rescue runs before the loop guard sees the call.
+export const sessionGuards: ExtensionFactory[] = [pathGuards, toolGuards];

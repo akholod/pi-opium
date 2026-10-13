@@ -15,7 +15,7 @@ import type {
   TurnOptions,
 } from 'pi-agent-runner';
 import type { AgentDefinition } from './agents.ts';
-import { toolGuards } from './guards.ts';
+import { sessionGuards } from './guards.ts';
 import { resolveMcpTools } from './mcp.ts';
 
 export interface ResolvedSkill {
@@ -121,8 +121,8 @@ export const buildLaunch = (
     noSkills: true,
     permissionAsks: def.permissionAsks,
     gitGuard: def.gitGuard,
-    // loop guard and JSON error recovery in every child, as in slim
-    extensionFactories: [toolGuards],
+    // path, loop and JSON error guards in every child, as in slim
+    extensionFactories: sessionGuards,
   };
   if (tools !== undefined) start.tools = tools;
   if (def.thinking !== undefined) start.thinking = def.thinking;
