@@ -47,7 +47,13 @@ import { createWake, type Wake } from '../src/wake.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
 import { applyPresetCommand } from '../src/presets.ts';
-import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
+import {
+  SAME_MODEL_NOTE,
+  renderSeats,
+  runCouncil,
+  sharedSeatModel,
+  type CouncilResult,
+} from '../src/council.ts';
 
 const SECTION = 'orchestrator';
 
@@ -92,7 +98,9 @@ export interface OpiumDeps {
 
 const WAIT_REASON_LIMIT = 500;
 
-const branchOf = (ctx: ExtensionContext | undefined): unknown =>
+const branchOf = (
+  ctx: ExtensionContext | undefined,
+): ReturnType<ExtensionContext['sessionManager']['getBranch']> | undefined =>
   ctx?.sessionManager?.getBranch();
 
 export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
@@ -386,6 +394,9 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
       for (const error of errors) {
         ctx.ui.notify(`[council] ${error}`, 'warning');
       }
+      if (sharedSeatModel({ overrides })) {
+        ctx.ui.notify(`[council] ${SAME_MODEL_NOTE}`, 'warning');
+      }
       ctx.ui.notify('[council] convening alpha, beta, gamma', 'info');
       const result = await runCouncil({
         parent: { events: pi.events, ctx },
@@ -454,7 +465,10 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
             details: {},
           }),
       });
-      const text = renderCouncil(result);
+      const overrides = agentOverrides(path).overrides;
+      const same = sharedSeatModel({ overrides });
+      const text =
+        renderCouncil(result) + (same ? `\n\nnote: ${SAME_MODEL_NOTE}` : '');
       // pi treats a tool call as failed only when execute throws
       if (result.outcome !== 'completed') throw new Error(text);
       return {

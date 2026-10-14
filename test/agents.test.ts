@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,8 +47,8 @@ test('every repo agent file loads', () => {
   };
   assert.equal(agents.size, 11);
   const scout = get('scout');
-  assert.deepEqual(scout.mcpServers, ['codegraph']);
-  assert.deepEqual(scout.packages, ['pi-mcp-adapter']);
+  assert.deepEqual(scout.mcpServers, []);
+  assert.deepEqual(scout.packages, []);
   assert.deepEqual(scout.tools, ['read', 'grep', 'find', 'ls']);
   assert.deepEqual(get('researcher').packages, ['pi-web-access']);
   assert.deepEqual(get('council').tools, []);
@@ -69,14 +76,22 @@ test('an agent with no opium.json entry gets the built-in fallbacks', () => {
   }
 });
 
-test('defaults/opium.json parses and carries the original values', () => {
+test('defaults/opium.json parses; every agent inherits the model', () => {
   const { overrides, errors } = readAgentOverrides(defaultsFile);
   assert.deepEqual(errors, []);
   const names = [...loadAgents({ dirs: [agentsDir] }).agents.keys()];
   assert.deepEqual(Object.keys(overrides).sort(), names.sort());
   assert.equal(names.length, 11);
   for (const [name, override] of Object.entries(overrides)) {
-    assert.ok(override.model, name);
+    assert.equal(override.model, undefined, name);
+    assert.equal(override.fallbackModels, undefined, name);
+    // MCP is asked for only where a code index helps; a missing server is
+    // skipped quietly
+    assert.deepEqual(
+      override.mcpServers,
+      ['scout', 'fixer', 'senior'].includes(name) ? ['codegraph'] : undefined,
+      name,
+    );
     assert.ok(override.thinking, name);
     assert.ok(override.timeoutMs, name);
     assert.equal(override.idleTimeoutMs, 600000, name);
@@ -88,23 +103,28 @@ test('defaults/opium.json parses and carries the original values', () => {
     assert.ok(agent, name);
     return agent;
   };
-  assert.equal(get('scout').model, 'openai-codex/gpt-6-luna');
+  assert.deepEqual(get('scout').models, ['inherit']);
   assert.equal(get('scout').thinking, 'low');
   assert.equal(get('scout').background, true);
   assert.equal(get('scout').timeoutMs, 600000);
   assert.equal(get('fast-generic').gitGuard, false);
   assert.equal(get('fixer').gitGuard, true);
-  assert.deepEqual(get('fixer').skills, ['pnpm']);
-  assert.deepEqual(get('designer').skills, ['make-interfaces-feel-better']);
+  // only skills shipped in this package
+  assert.deepEqual(get('fixer').skills, []);
+  assert.deepEqual(get('designer').skills, []);
   assert.equal(get('designer').timeoutMs, 7200000);
   assert.equal(get('fixer').timeoutMs, 7200000);
   assert.deepEqual(get('senior').skills, ['simplify']);
   assert.equal(get('senior').thinking, 'xhigh');
   assert.equal(get('vision').background, false);
-  assert.equal(get('council').model, 'opencode-go/kimi-k3');
-  assert.equal(get('councillor-alpha').model, 'openai-codex/gpt-6-luna');
-  assert.equal(get('councillor-beta').model, 'opencode-go/deepseek-v4-pro');
-  assert.equal(get('councillor-gamma').model, 'opencode-go/glm-5.3');
+  for (const name of [
+    'council',
+    'councillor-alpha',
+    'councillor-beta',
+    'councillor-gamma',
+  ]) {
+    assert.deepEqual(get(name).models, ['inherit'], name);
+  }
 });
 
 test('field parsing accepts strings and lists', () => {
@@ -117,7 +137,7 @@ test('field parsing accepts strings and lists', () => {
   const agent = loadAgent('x', { dirs: [dir] });
   assert.deepEqual(agent.tools, ['read', 'web_search']);
   assert.deepEqual(agent.mcpServers, ['s']);
-  assert.deepEqual(agent.packages, ['pi-mcp-adapter', 'pi-web-access']);
+  assert.deepEqual(agent.packages, ['pi-web-access']);
   assert.equal(agent.contextFiles, true);
 });
 
@@ -228,6 +248,7 @@ test('every override field applies over the built-in fallbacks', () => {
         permissionAsks: 'deny',
         gitGuard: false,
         skills: ['a', 'b'],
+        mcpServers: ['m'],
       },
     },
   });
@@ -239,6 +260,51 @@ test('every override field applies over the built-in fallbacks', () => {
   assert.equal(agent.permissionAsks, 'deny');
   assert.equal(agent.gitGuard, false);
   assert.deepEqual(agent.skills, ['a', 'b']);
+  assert.deepEqual(agent.mcpServers, ['m']);
+});
+
+test('the mcpServers override replaces the .md mcp: entries', () => {
+  const dir = dirWith({ x: doc('tools: read, mcp:a, mcp:b\n') });
+  assert.deepEqual(loadAgent('x', { dirs: [dir] }).mcpServers, ['a', 'b']);
+  const agent = loadAgent('x', {
+    dirs: [dir],
+    overrides: { x: { mcpServers: ['c'] } },
+  });
+  assert.deepEqual(agent.mcpServers, ['c']);
+  assert.deepEqual(agent.tools, ['read']);
+  const none = loadAgent('x', {
+    dirs: [dir],
+    overrides: { x: { mcpServers: [] } },
+  });
+  assert.deepEqual(none.mcpServers, []);
+});
+
+test('shipped agents have no mcp: entries and need no packages but web', () => {
+  const { agents } = loadAgents({ dirs: [agentsDir] });
+  for (const agent of agents.values()) {
+    assert.deepEqual(agent.mcpServers, [], agent.name);
+    assert.ok(!agent.packages.includes('pi-mcp-adapter'), agent.name);
+  }
+  for (const file of readdirSync(agentsDir)) {
+    const text = readFileSync(join(agentsDir, file), 'utf8');
+    assert.doesNotMatch(text, /^tools:.*mcp:/m, file);
+  }
+});
+
+test('the ideal example parses and gives scout, fixer, senior codegraph', () => {
+  const text = readFileSync(join(root, 'docs', 'examples', 'ideal.md'), 'utf8');
+  const json = /```json\n([\s\S]*?)\n```/.exec(text)?.[1];
+  assert.ok(json);
+  const dir = tmp();
+  const file = join(dir, 'opium.json');
+  writeFileSync(file, json);
+  const { overrides, errors } = readAgentOverrides(file);
+  assert.deepEqual(errors, []);
+  const { agents } = loadAgents({ dirs: [agentsDir], overrides });
+  for (const name of ['scout', 'fixer', 'senior']) {
+    assert.deepEqual(agents.get(name)?.mcpServers, ['codegraph'], name);
+  }
+  assert.deepEqual(agents.get('researcher')?.mcpServers, []);
 });
 
 test('parseOverride accepts the full field list', () => {
@@ -258,6 +324,7 @@ test('parseOverride accepts the full field list', () => {
       permissionAsks: 'deny',
       gitGuard: false,
       skills: 'x, y',
+      mcpServers: 'a, b',
     },
     errors,
   );
@@ -274,6 +341,7 @@ test('parseOverride accepts the full field list', () => {
     permissionAsks: 'deny',
     gitGuard: false,
     skills: ['x', 'y'],
+    mcpServers: ['a', 'b'],
   });
 });
 
@@ -290,6 +358,7 @@ test('parseOverride: an invalid value is an error and the field is ignored', () 
     permissionAsks: 'ask',
     gitGuard: 3,
     skills: 5,
+    mcpServers: 5,
   };
   for (const [key, value] of Object.entries(bad)) {
     const errors: string[] = [];
@@ -444,7 +513,7 @@ test('mcp: directTools list filters; global directTools applies', () => {
   assert.equal(resolveMcpTools(['my-mcp'], global).tools.length, 2);
 });
 
-test('mcp: errors for missing, direct-less, uncached servers', () => {
+test('mcp: errors for direct-less, uncached, disabled servers', () => {
   const paths = mcpFixture(
     {},
     { 'my-mcp': {}, nocache: { directTools: true }, off: { disabled: true } },
@@ -454,14 +523,14 @@ test('mcp: errors for missing, direct-less, uncached servers', () => {
     paths,
   );
   assert.deepEqual(tools, []);
-  assert.equal(errors.length, 4);
+  // a server that is not configured is optional: no tools, no error
+  assert.equal(errors.length, 3);
   assert.match(errors[0], /"my-mcp" has no direct tools/);
   assert.match(errors[1], /"nocache" is not in the metadata cache/);
-  assert.match(errors[2], /"ghost" is not configured/);
-  assert.match(errors[3], /"off" is disabled/);
+  assert.match(errors[2], /"off" is disabled/);
   const missing = resolveMcpTools(['x'], {
     configPath: join(tmp(), 'none.json'),
     cachePath: paths.cachePath,
   });
-  assert.match(missing.errors[0], /cannot read MCP config/);
+  assert.deepEqual(missing, { tools: [], errors: [] });
 });

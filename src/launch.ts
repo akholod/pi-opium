@@ -9,6 +9,7 @@ import {
   loadSkills,
   stripFrontmatter,
 } from '@earendil-works/pi-coding-agent';
+import { builtinMcpDisabled, builtinMcpServers } from 'pi-agent-runner';
 import type {
   ParentContext,
   StartAgentOptions,
@@ -27,6 +28,8 @@ export interface LaunchContext {
   parent: ParentContext;
   cwd: string;
   resolveMcp?: typeof resolveMcpTools;
+  builtinMcpServers?: typeof builtinMcpServers;
+  builtinMcpDisabled?: typeof builtinMcpDisabled;
   resolveSkill?: (name: string, cwd: string) => ResolvedSkill | undefined;
 }
 
@@ -86,6 +89,8 @@ export const buildLaunch = (
   const warnings: string[] = [];
   const resolveSkill = ctx.resolveSkill ?? (() => undefined);
   const resolveMcp = ctx.resolveMcp ?? resolveMcpTools;
+  const listBuiltin = ctx.builtinMcpServers ?? builtinMcpServers;
+  const isBuiltinDisabled = ctx.builtinMcpDisabled ?? builtinMcpDisabled;
 
   let systemPrompt = def.prompt;
   for (const name of def.skills) {
@@ -98,15 +103,35 @@ export const buildLaunch = (
     systemPrompt += `\n\n<skill name="${name}">\n${body}\n</skill>`;
   }
 
+  // Per server: Pi's built-in MCP when it has the server, else the
+  // pi-mcp-adapter when it is configured there, else the server is skipped.
+  const packages = [...def.packages];
+  const builtin: string[] = [];
+  const viaAdapter: string[] = [];
+  if (def.mcpServers.length) {
+    const known = new Set<string>();
+    if (!isBuiltinDisabled(ctx.cwd)) {
+      for (const server of listBuiltin(ctx.cwd)) {
+        if (server.enabled) known.add(server.name);
+      }
+    }
+    for (const server of def.mcpServers) {
+      (known.has(server) ? builtin : viaAdapter).push(server);
+    }
+  }
+
   let tools: string[] | undefined;
   if (def.tools !== undefined) {
     tools = [...def.tools];
-    if (def.mcpServers.length) {
+    if (viaAdapter.length) {
       try {
-        const mcp = resolveMcp(def.mcpServers);
+        const mcp = resolveMcp(viaAdapter);
         warnings.push(...mcp.errors);
         for (const tool of mcp.tools) {
           if (!tools.includes(tool)) tools.push(tool);
+        }
+        if (mcp.tools.length && !packages.includes('pi-mcp-adapter')) {
+          packages.unshift('pi-mcp-adapter');
         }
       } catch (error) {
         warnings.push(error instanceof Error ? error.message : String(error));
@@ -120,7 +145,7 @@ export const buildLaunch = (
     label: { name: def.name, context: 'opium' },
     systemPrompt,
     model: def.models[0],
-    extensions: def.packages.length ? { packages: def.packages } : 'none',
+    extensions: packages.length ? { packages } : 'none',
     noContextFiles: !def.contextFiles,
     noSkills: true,
     permissionAsks: def.permissionAsks,
@@ -128,6 +153,7 @@ export const buildLaunch = (
     // path, loop and JSON error guards in every child, as in slim
     extensionFactories: sessionGuards,
   };
+  if (builtin.length) start.mcpServers = builtin;
   if (tools !== undefined) start.tools = tools;
   if (def.thinking !== undefined) start.thinking = def.thinking;
 

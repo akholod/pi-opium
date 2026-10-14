@@ -2,52 +2,45 @@
   "orchestrator": true,
   "agents": {
     "council": {
-      "model": "opencode-go/kimi-k3",
       "thinking": "high",
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "councillor-alpha": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "high",
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "councillor-beta": {
-      "model": "opencode-go/deepseek-v4-pro",
       "thinking": "high",
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "councillor-gamma": {
-      "model": "opencode-go/glm-5.3",
       "thinking": "high",
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "designer": {
-      "model": "opencode-go/kimi-k2.7-code",
       "thinking": "medium",
-      "skills": ["make-interfaces-feel-better"],
       "background": true,
       "timeoutMs": 7200000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "scout": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
       "timeoutMs": 600000,
       "idleTimeoutMs": 600000,
-      "wrapUpMs": 180000
+      "wrapUpMs": 180000,
+      "mcpServers": ["codegraph"]
     },
     "fast-generic": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
       "gitGuard": false,
@@ -56,16 +49,14 @@
       "wrapUpMs": 180000
     },
     "fixer": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "medium",
-      "skills": ["pnpm"],
       "background": true,
       "timeoutMs": 7200000,
       "idleTimeoutMs": 600000,
-      "wrapUpMs": 180000
+      "wrapUpMs": 180000,
+      "mcpServers": ["codegraph"]
     },
     "researcher": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
       "timeoutMs": 900000,
@@ -73,20 +64,19 @@
       "wrapUpMs": 180000
     },
     "vision": {
-      "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "timeoutMs": 600000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
     "senior": {
-      "model": "openai-codex/gpt-6-astra",
       "thinking": "xhigh",
       "skills": ["simplify"],
       "background": true,
       "timeoutMs": 1200000,
       "idleTimeoutMs": 600000,
-      "wrapUpMs": 180000
+      "wrapUpMs": 180000,
+      "mcpServers": ["codegraph"]
     }
   }
 }

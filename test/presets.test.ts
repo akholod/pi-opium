@@ -74,11 +74,13 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
           gitGuard: false,
         },
         senior: { skills: ['s1'], permissionAsks: 'deny' },
+        scout: { mcpServers: ['idx'] },
       },
     },
     agents: {
       fixer: { model: 'a/m', timeoutMs: 9, wrapUpMs: 11, background: true },
       senior: { skills: ['s2'] },
+      scout: { mcpServers: ['idx2', 'idx3'] },
     },
   });
   write(join(d, 'settings.json'), {
@@ -99,7 +101,21 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
     skills: ['s2'],
     permissionAsks: 'deny',
   });
+  assert.deepEqual(overrides.scout, { mcpServers: ['idx2', 'idx3'] });
   assert.equal(overrides.x, undefined);
+});
+
+test('a preset validates mcpServers like skills', () => {
+  const opium = join(dir(), 'opium.json');
+  write(opium, {
+    preset: 'p',
+    presets: { p: { scout: { mcpServers: 5 }, fixer: { mcpServers: 'a, b' } } },
+  });
+  const { overrides, errors } = readAgentOverrides(opium);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /mcpServers/);
+  assert.deepEqual(overrides.fixer, { mcpServers: ['a', 'b'] });
+  assert.deepEqual(overrides.scout, {});
 });
 
 test('presets.<p>.<legacy> applies to the new agent with a warning; the new key wins', () => {

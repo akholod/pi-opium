@@ -25,9 +25,9 @@ export interface AgentDefinition {
   thinking?: ThinkingLevel;
   // plain tool names; undefined = Pi's default tools; [] = no tools
   tools?: string[];
-  // servers named by `mcp:<server>` entries in tools
+  // MCP servers: `mcp:<server>` entries in tools, or the mcpServers override
   mcpServers: string[];
-  // extension packages the agent needs
+  // extension packages the agent needs (web search; MCP is decided at launch)
   packages: string[];
   skills: string[];
   timeoutMs?: number;
@@ -55,6 +55,7 @@ export interface AgentOverride {
   permissionAsks?: PermissionAsks;
   gitGuard?: boolean;
   skills?: string[];
+  mcpServers?: string[];
 }
 
 export type AgentOverrides = Record<string, AgentOverride>;
@@ -289,7 +290,6 @@ const parseDefinition = (
     }
   }
   const packages: string[] = [];
-  if (mcpServers.length) packages.push('pi-mcp-adapter');
   if (tools?.some((tool) => WEB_TOOLS.includes(tool))) {
     packages.push('pi-web-access');
   }
@@ -353,6 +353,9 @@ const withOverride = (
   }
   if (override.gitGuard !== undefined) merged.gitGuard = override.gitGuard;
   if (override.skills !== undefined) merged.skills = [...override.skills];
+  if (override.mcpServers !== undefined) {
+    merged.mcpServers = [...override.mcpServers];
+  }
   merged.models = computeModels(merged.model, merged.fallbackModels);
   return merged;
 };
@@ -456,6 +459,7 @@ const OVERRIDE_KEYS = [
   'permissionAsks',
   'gitGuard',
   'skills',
+  'mcpServers',
 ];
 
 export const parseOverride = (
@@ -500,6 +504,8 @@ export const parseOverride = (
           field,
           ['forward', 'deny'],
         );
+      } else if (key === 'mcpServers') {
+        out.mcpServers = parseList('mcpServers', field);
       } else {
         out.skills = parseList('skills', field);
       }

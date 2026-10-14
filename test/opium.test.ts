@@ -19,7 +19,7 @@ import {
   loadAgent,
   readAgentOverrides,
 } from '../src/agents.ts';
-import { runCouncil } from '../src/council.ts';
+import { runCouncil, sharedSeatModel } from '../src/council.ts';
 import {
   readState,
   seedDefaults,
@@ -37,6 +37,21 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const agentsDir = join(root, 'agents');
 // the shipped runtime values, as a user's seeded opium.json would hold them
 const shipped = readAgentOverrides(join(root, 'defaults', 'opium.json'));
+// the shipped seats inherit one model; the tests give each its own
+const COUNCIL_AGENTS = [
+  'councillor-alpha',
+  'councillor-beta',
+  'councillor-gamma',
+  'council',
+];
+const seated = Object.fromEntries(
+  Object.entries(shipped.overrides).map(([name, override]) => [
+    name,
+    COUNCIL_AGENTS.includes(name)
+      ? { ...override, model: `t/${name}` }
+      : override,
+  ]),
+);
 const agentBody = (name: string): string =>
   parseFrontmatter(
     readFileSync(join(agentsDir, `${name}.md`), 'utf8'),
@@ -173,9 +188,7 @@ test('createOpium seeds opium.json at load, leaves an existing one', () => {
 
 // the councillor prompts are identical; the models tell the agents apart
 const agentOf = (model: string | undefined): string =>
-  ['councillor-alpha', 'councillor-beta', 'councillor-gamma', 'council'].find(
-    (name) => shipped.overrides[name]?.model === model,
-  ) ?? 'unknown';
+  COUNCIL_AGENTS.find((name) => seated[name]?.model === model) ?? 'unknown';
 
 const fake = (answers: Record<string, RunAgentResult['status']> = {}) => {
   const calls: (RunAgentOptions & { agent: string })[] = [];
@@ -212,7 +225,7 @@ const base = {
   parent,
   cwd: '/tmp',
   agentDirs: [agentsDir],
-  overrides: shipped.overrides,
+  overrides: seated,
 };
 
 test('council: councillors in parallel, then synthesis', async () => {
@@ -240,7 +253,7 @@ test('council: councillors in parallel, then synthesis', async () => {
   for (const call of f.calls) {
     assert.equal(call.systemPrompt, agentBody(call.agent));
   }
-  assert.equal(f.calls[0].model, 'openai-codex/gpt-6-luna');
+  assert.equal(f.calls[0].model, 't/councillor-alpha');
   assert.equal(f.calls[0].thinking, 'high');
   assert.equal(f.calls[0].timeoutMs, 900000);
   assert.match(f.calls[0].task, /see \.editorconfig/);
@@ -335,14 +348,14 @@ test('council: wrapUpMs and idleTimeoutMs reach every seat and the synthesizer',
     ...base,
     question: 'q',
     overrides: {
-      ...shipped.overrides,
+      ...seated,
       'councillor-alpha': {
-        ...shipped.overrides['councillor-alpha'],
+        ...seated['councillor-alpha'],
         wrapUpMs: 11,
         idleTimeoutMs: 22,
       },
       council: {
-        ...shipped.overrides.council,
+        ...seated.council,
         wrapUpMs: 33,
         idleTimeoutMs: 44,
       },
@@ -618,4 +631,22 @@ test('opium.json: fallbackModels parses strings and lists, validates', () => {
     assert.equal(errors.length, 1, bad);
     assert.match(errors[0], /fallbackModels/);
   }
+});
+
+test('council: seats sharing one model are detected', () => {
+  const dirs = [agentsDir];
+  assert.equal(
+    sharedSeatModel({ agentDirs: dirs, overrides: shipped.overrides }),
+    'inherit',
+  );
+  assert.equal(sharedSeatModel({ agentDirs: dirs, overrides: seated }), null);
+  const one = {
+    ...seated,
+    'councillor-beta': { model: 't/councillor-alpha' },
+    'councillor-gamma': { model: 't/councillor-alpha' },
+  };
+  assert.equal(
+    sharedSeatModel({ agentDirs: dirs, overrides: one }),
+    't/councillor-alpha',
+  );
 });

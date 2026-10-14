@@ -359,6 +359,31 @@ export const runCouncil = async (
 };
 
 // Fallback rendering when synthesis failed but councillors answered.
+// The model every seat starts on when they all share one (the shipped
+// defaults inherit the session's model); a council of one model is only
+// one opinion.
+export const sharedSeatModel = (
+  options: Pick<CouncilOptions, 'agentDirs' | 'overrides'>,
+): string | null => {
+  try {
+    const first = SEATS.map(
+      (seat) =>
+        loadAgent(councillorAgent(seat), {
+          dirs: options.agentDirs,
+          overrides: options.overrides,
+        }).models[0],
+    );
+    return first.every((model) => model === first[0]) ? first[0] : null;
+  } catch {
+    return null;
+  }
+};
+
+export const SAME_MODEL_NOTE =
+  'all council seats use the same model, so this is one opinion; set ' +
+  'different models for councillor-alpha, -beta and -gamma in ' +
+  '~/.pi/agent/opium.json';
+
 export const renderSeats = (seats: SeatResult[]): string =>
   seats
     .map((seat) => {

@@ -1,6 +1,6 @@
 ---
 name: councillor-gamma
-description: Read-only council seat "gamma" (opencode-go/glm-5.3). Independent analysis for /council; dispatched by the council workflow, not directly.
+description: Read-only council seat "gamma". Independent analysis for /council; dispatched by the council workflow, not directly.
 tools: read, grep, find, ls
 ---
 

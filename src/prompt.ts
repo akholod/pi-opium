@@ -19,7 +19,7 @@ const AGENTS: Record<string, string> = {
   scout: `scout
 - Lane: fast codebase recon that returns compressed context (read-only, background)
 - Stats: 2x faster codebase search than you, 1/2 cost
-- Capabilities: grep, find, codegraph queries to locate files, symbols, patterns, call paths
+- Capabilities: grep, find and an MCP code index when configured, to locate files, symbols, patterns, call paths
 - **Delegate when:** need to discover what exists before planning • parallel searches speed discovery • need a summarized map vs full contents • broad or uncertain scope
 - **Don't delegate when:** you know the path and need actual content • need the full file anyway • single specific lookup • about to edit the file`,
 

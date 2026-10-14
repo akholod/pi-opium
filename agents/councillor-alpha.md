@@ -1,6 +1,6 @@
 ---
 name: councillor-alpha
-description: Read-only council seat "alpha" (openai-codex/gpt-6-luna). Independent analysis for /council; dispatched by the council workflow, not directly.
+description: Read-only council seat "alpha". Independent analysis for /council; dispatched by the council workflow, not directly.
 tools: read, grep, find, ls
 ---
 

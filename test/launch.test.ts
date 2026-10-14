@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ParentContext } from 'pi-agent-runner';
+import type { BuiltinMcpServer, ParentContext } from 'pi-agent-runner';
 import {
   loadAgent,
   type AgentDefinition,
   type AgentOverride,
 } from '../src/agents.ts';
-import { buildLaunch, skillResolver } from '../src/launch.ts';
+import {
+  buildLaunch,
+  skillResolver,
+  type LaunchContext,
+} from '../src/launch.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,10 +49,36 @@ test('defaults: no tools, no extensions, no context files', () => {
   assert.deepEqual(warnings, []);
 });
 
-test('tools get MCP names; packages become extensions', () => {
+const builtin = (
+  ...servers: [string, boolean][]
+): Pick<LaunchContext, 'builtinMcpServers' | 'builtinMcpDisabled'> => ({
+  builtinMcpServers: () =>
+    servers.map(([name, enabled]) => ({ name, enabled }) as BuiltinMcpServer),
+  builtinMcpDisabled: () => false,
+});
+
+const noAdapter: LaunchContext['resolveMcp'] = () => {
+  throw new Error('adapter must not be consulted');
+};
+
+test('a built-in MCP server goes to the runner, not the adapter', () => {
+  const def = agent('tools: read\n', { mcpServers: ['codegraph'] });
+  const { start, warnings } = buildLaunch(def, {
+    ...base,
+    ...builtin(['codegraph', true]),
+    resolveMcp: noAdapter,
+  });
+  assert.deepEqual(start.mcpServers, ['codegraph']);
+  assert.deepEqual(start.tools, ['read']);
+  assert.equal(start.extensions, 'none');
+  assert.deepEqual(warnings, []);
+});
+
+test('an adapter-only server adds tool names and the adapter package', () => {
   const def = agent('tools: read, mcp:codegraph\n');
   const { start, warnings } = buildLaunch(def, {
     ...base,
+    ...builtin(),
     resolveMcp: (servers) => {
       assert.deepEqual(servers, ['codegraph']);
       return { tools: ['codegraph_search'], errors: ['no cache'] };
@@ -56,18 +86,78 @@ test('tools get MCP names; packages become extensions', () => {
   });
   assert.deepEqual(start.tools, ['read', 'codegraph_search']);
   assert.deepEqual(start.extensions, { packages: ['pi-mcp-adapter'] });
+  assert.equal(start.mcpServers, undefined);
   assert.deepEqual(warnings, ['no cache']);
+});
+
+test('built-in MCP disabled sends the server to the adapter', () => {
+  const def = agent('tools: read\n', { mcpServers: ['codegraph'] });
+  const { start } = buildLaunch(def, {
+    ...base,
+    builtinMcpServers: () => [{ name: 'codegraph', enabled: true }],
+    builtinMcpDisabled: () => true,
+    resolveMcp: () => ({ tools: ['codegraph_search'], errors: [] }),
+  });
+  assert.equal(start.mcpServers, undefined);
+  assert.deepEqual(start.tools, ['read', 'codegraph_search']);
+  assert.deepEqual(start.extensions, { packages: ['pi-mcp-adapter'] });
+});
+
+test('a disabled built-in server falls back to the adapter', () => {
+  const def = agent('tools: read\n', { mcpServers: ['codegraph'] });
+  const { start } = buildLaunch(def, {
+    ...base,
+    ...builtin(['codegraph', false]),
+    resolveMcp: () => ({ tools: ['codegraph_search'], errors: [] }),
+  });
+  assert.equal(start.mcpServers, undefined);
+  assert.deepEqual(start.tools, ['read', 'codegraph_search']);
+});
+
+test('an unknown server is skipped without a warning', () => {
+  const def = agent('tools: read\n', { mcpServers: ['ghost'] });
+  const { start, warnings } = buildLaunch(def, {
+    ...base,
+    ...builtin(['other', true]),
+    resolveMcp: () => ({ tools: [], errors: [] }),
+  });
+  assert.equal(start.mcpServers, undefined);
+  assert.deepEqual(start.tools, ['read']);
+  assert.equal(start.extensions, 'none');
+  assert.deepEqual(warnings, []);
+});
+
+test('mixed servers: built-in, adapter and unknown', () => {
+  const def = agent('tools: read, web_search\n', {
+    mcpServers: ['b', 'a', 'ghost'],
+  });
+  const { start, warnings } = buildLaunch(def, {
+    ...base,
+    ...builtin(['b', true]),
+    resolveMcp: (servers) => {
+      assert.deepEqual(servers, ['a', 'ghost']);
+      return { tools: ['a_tool'], errors: [] };
+    },
+  });
+  assert.deepEqual(start.mcpServers, ['b']);
+  assert.deepEqual(start.tools, ['read', 'web_search', 'a_tool']);
+  assert.deepEqual(start.extensions, {
+    packages: ['pi-mcp-adapter', 'pi-web-access'],
+  });
+  assert.deepEqual(warnings, []);
 });
 
 test('MCP resolution throwing still launches', () => {
   const def = agent('tools: read, mcp:x\n');
   const { start, warnings } = buildLaunch(def, {
     ...base,
+    ...builtin(),
     resolveMcp: () => {
       throw new Error('boom');
     },
   });
   assert.deepEqual(start.tools, ['read']);
+  assert.equal(start.extensions, 'none');
   assert.deepEqual(warnings, ['boom']);
 });
 

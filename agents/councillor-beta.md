@@ -1,6 +1,6 @@
 ---
 name: councillor-beta
-description: Read-only council seat "beta" (opencode-go/deepseek-v4-pro). Independent analysis for /council; dispatched by the council workflow, not directly.
+description: Read-only council seat "beta". Independent analysis for /council; dispatched by the council workflow, not directly.
 tools: read, grep, find, ls
 ---
 

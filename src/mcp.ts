@@ -30,7 +30,13 @@ const isRecord = (value: unknown): value is Json =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const readJson = (path: string): Json => {
-  const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`invalid JSON: ${message}`, { cause: error });
+  }
   if (!isRecord(value)) throw new Error('not a JSON object');
   return value;
 };
@@ -84,6 +90,9 @@ export const resolveMcpTools = (
       return `${path}: cannot read ${what}: ${message}`;
     }
   };
+  // MCP is optional: without a config, or without the server in it, the
+  // agent simply works without those tools
+  if (!existsSync(configPath)) return { tools, errors };
   const config = read(configPath, 'MCP config');
   if (typeof config === 'string') return { tools, errors: [config] };
   const cache = read(cachePath, 'MCP metadata cache');
@@ -94,10 +103,7 @@ export const resolveMcpTools = (
   const cached = isRecord(cache.servers) ? cache.servers : {};
   for (const server of servers) {
     const def = defs[server];
-    if (!isRecord(def)) {
-      errors.push(`${configPath}: MCP server "${server}" is not configured`);
-      continue;
-    }
+    if (!isRecord(def)) continue;
     if (def.disabled === true) {
       errors.push(`${configPath}: MCP server "${server}" is disabled`);
       continue;
