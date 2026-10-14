@@ -79,6 +79,7 @@ const setup = (orchestrator = true) => {
     },
     registerTool: (tool: Tool & { name: string }) => tools.set(tool.name, tool),
     registerCommand() {},
+    appendEntry() {},
     sendMessage: (message: never) => {
       sent.push({ message });
     },

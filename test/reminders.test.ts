@@ -157,3 +157,108 @@ test('context handler does nothing when orchestrator is off', async () => {
   const result = (await run([user('hello')])).at(-1)!;
   assert.equal(result.messages, undefined);
 });
+
+// Extension-originated user messages (pi.sendUserMessage) carry no marker in
+// the message; opium records them from the `input` event as session entries.
+const setupWithBranch = (branch: unknown[]) => {
+  const home = mkdtempSync(join(tmpdir(), 'opium-rem-'));
+  mkdirSync(join(home, '.pi', 'agent'), { recursive: true });
+  writeFileSync(
+    join(home, '.pi', 'agent', 'opium.json'),
+    JSON.stringify({ orchestrator: true }),
+  );
+  const handlers = new Map<string, Handler[]>();
+  const pi = {
+    events: { emit() {}, on: () => () => {} },
+    on: (name: string, fn: Handler) => {
+      handlers.set(name, [...(handlers.get(name) ?? []), fn]);
+    },
+    registerTool() {},
+    registerCommand() {},
+    sendMessage() {},
+    appendEntry: (customType: string, data: unknown) => {
+      branch.push({ type: 'custom', customType, data });
+    },
+  } as unknown as ExtensionAPI;
+  const ctx = {
+    sessionManager: { getBranch: () => branch },
+  } as unknown as ExtensionContext;
+  const previous = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    createOpium(pi, { runsDir: join(home, 'runs') });
+  } finally {
+    process.env.HOME = previous;
+  }
+  return {
+    input: async (text: string, source: string) => {
+      for (const fn of handlers.get('input') ?? []) {
+        await fn({ type: 'input', text, source }, ctx);
+      }
+    },
+    context: async (messages: Messages) => {
+      let out: Messages | undefined;
+      for (const fn of handlers.get('context') ?? []) {
+        const result = (await fn({ type: 'context', messages }, ctx)) as
+          { messages?: Messages } | undefined;
+        if (result?.messages) out = result.messages;
+      }
+      return out!;
+    },
+  };
+};
+
+const PI_LENS =
+  '[pi-lens automated context — not a user request] review src/council.ts ' +
+  'for consensus handling';
+
+test('extension-originated user message gets no reminder, typed one does', async () => {
+  const branch: unknown[] = [];
+  const opium = setupWithBranch(branch);
+  await opium.input(PI_LENS, 'extension');
+  await opium.input('give me a consensus', 'interactive');
+  const messages = [
+    user([{ type: 'text', text: PI_LENS }]),
+    user('give me a consensus'),
+  ];
+  const snapshot = structuredClone(messages);
+  const out = await opium.context(messages);
+  assert.deepEqual(messages, snapshot);
+  assert.deepEqual(texts(out[0]), [PI_LENS]);
+  assert.deepEqual(texts(out[1]), [
+    'give me a consensus',
+    PHASE_REMINDER,
+    COUNCIL_MODE_BLOCK,
+  ]);
+  // idempotent
+  assert.deepEqual(await opium.context(out), out);
+  // only the extension input was recorded, once
+  await opium.input(PI_LENS, 'extension');
+  assert.equal(branch.length, 1);
+});
+
+test('extension-originated skip survives a restart from the same branch', async () => {
+  const branch: unknown[] = [];
+  const first = setupWithBranch(branch);
+  await first.input(PI_LENS, 'extension');
+  const messages = [
+    user([{ type: 'text', text: PI_LENS }]),
+    user('plain question'),
+  ];
+  const before = await first.context(messages);
+  const restarted = setupWithBranch(branch);
+  const after = await restarted.context(messages);
+  assert.deepEqual(after, before);
+  assert.deepEqual(texts(after[0]), [PI_LENS]);
+  assert.deepEqual(texts(after[1]), ['plain question', PHASE_REMINDER]);
+});
+
+test('unrecorded user messages are still reminded', async () => {
+  const opium = setupWithBranch([]);
+  const out = await opium.context([user(PI_LENS)]);
+  assert.deepEqual(texts(out[0]), [
+    PI_LENS,
+    PHASE_REMINDER,
+    COUNCIL_MODE_BLOCK,
+  ]);
+});

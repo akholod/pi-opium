@@ -4,7 +4,15 @@
 // Cache safety: injection is a pure function of the messages. Every user
 // message gets the same bytes at the same position on every request, so the
 // provider prompt-cache prefix stays stable; nothing is kept in memory.
+//
+// Only messages the person typed are reminded. Pi gives a user message sent
+// through pi.sendUserMessage no marker of its own (it lands as a plain
+// role:'user' message), so extension-originated inputs are recorded from the
+// `input` event (source === 'extension') as session entries holding a hash
+// of the text, and matching user messages are skipped. The markers live in
+// the session branch, so the decision is identical after a restart.
 
+import { createHash } from 'node:crypto';
 import type { ContextEvent } from '@earendil-works/pi-coding-agent';
 
 type AgentMessage = ContextEvent['messages'][number];
@@ -62,11 +70,39 @@ export const matchesCouncilTrigger = (text: string): boolean => {
 
 type Part = { type: string; text?: string };
 
+export const EXTENSION_INPUT_ENTRY = 'opium-extension-input';
+
+export const hashInput = (text: string): string =>
+  createHash('sha256').update(text).digest('hex').slice(0, 16);
+
+/** Hashes of extension-originated inputs recorded on the given branch. */
+export const extensionInputHashes = (entries: unknown): Set<string> => {
+  const hashes = new Set<string>();
+  if (!Array.isArray(entries)) return hashes;
+  for (const entry of entries as {
+    type?: string;
+    customType?: string;
+    data?: { hash?: unknown };
+  }[]) {
+    if (
+      entry?.type === 'custom' &&
+      entry.customType === EXTENSION_INPUT_ENTRY
+    ) {
+      const hash = entry.data?.hash;
+      if (typeof hash === 'string') hashes.add(hash);
+    }
+  }
+  return hashes;
+};
+
 const isOwnPart = (part: Part): boolean =>
   part.type === 'text' &&
   (part.text === PHASE_REMINDER || part.text === COUNCIL_MODE_BLOCK);
 
-const injectInto = (message: AgentMessage): AgentMessage => {
+const injectInto = (
+  message: AgentMessage,
+  extensionInputs: ReadonlySet<string>,
+): AgentMessage => {
   if (message.role !== 'user') return message;
   const parts: Part[] =
     typeof message.content === 'string'
@@ -76,6 +112,9 @@ const injectInto = (message: AgentMessage): AgentMessage => {
   const texts = parts
     .filter((p) => p.type === 'text' && !isOwnPart(p))
     .map((p) => p.text ?? '');
+  if (texts.length > 0 && extensionInputs.has(hashInput(texts[0]))) {
+    return message;
+  }
   // the slash-command gate applies to the first text part, the trigger
   // scan to every text part
   const slash =
@@ -93,5 +132,7 @@ const injectInto = (message: AgentMessage): AgentMessage => {
   } as AgentMessage;
 };
 
-export const injectReminders = (messages: AgentMessage[]): AgentMessage[] =>
-  messages.map(injectInto);
+export const injectReminders = (
+  messages: AgentMessage[],
+  extensionInputs: ReadonlySet<string> = new Set(),
+): AgentMessage[] => messages.map((m) => injectInto(m, extensionInputs));

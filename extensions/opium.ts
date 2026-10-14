@@ -37,7 +37,12 @@ import {
   registerAgentTools,
 } from '../src/tools.ts';
 import { boardFingerprint, formatBoard } from '../src/board.ts';
-import { injectReminders } from '../src/reminders.ts';
+import {
+  EXTENSION_INPUT_ENTRY,
+  extensionInputHashes,
+  hashInput,
+  injectReminders,
+} from '../src/reminders.ts';
 import { createWake, type Wake } from '../src/wake.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
@@ -86,6 +91,9 @@ export interface OpiumDeps {
 }
 
 const WAIT_REASON_LIMIT = 500;
+
+const branchOf = (ctx: ExtensionContext | undefined): unknown =>
+  ctx?.sessionManager?.getBranch();
 
 export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   const path = statePath(CONFIG_DIR_NAME);
@@ -195,8 +203,17 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     if (isSubagentChild || !state.orchestrator) return;
     wake.settled();
   });
-  pi.on('input', (event) => {
-    if (event.source !== 'extension') wake.userInput();
+  pi.on('input', (event, ctx) => {
+    if (event.source !== 'extension') {
+      wake.userInput();
+      return undefined;
+    }
+    // Pi marks nothing on the resulting user message, so remember the text
+    // durably; the context handler then skips it (see src/reminders.ts)
+    const hash = hashInput(event.text);
+    if (!extensionInputHashes(branchOf(ctx)).has(hash)) {
+      pi.appendEntry(EXTENSION_INPUT_ENTRY, { hash });
+    }
     return undefined;
   });
   pi.on('session_shutdown', async () => {
@@ -240,9 +257,14 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   });
 
   // request-local: reminders are never persisted into the session
-  pi.on('context', (event) => {
+  pi.on('context', (event, ctx) => {
     if (isSubagentChild || !state.orchestrator) return {};
-    return { messages: injectReminders(event.messages) };
+    return {
+      messages: injectReminders(
+        event.messages,
+        extensionInputHashes(branchOf(ctx)),
+      ),
+    };
   });
 
   pi.registerTool({
