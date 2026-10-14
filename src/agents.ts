@@ -1,7 +1,8 @@
 // Opium's own agent definitions: agents/*.md with YAML frontmatter, loaded
-// from the user directory first, then the package. The files still use the
-// pi-subagents field names (until they are migrated), so the loader maps
-// legacy names to the Opium ones.
+// from the user directory first, then the package. The files hold the prompt
+// and structural metadata only (name, description, tools, advertise,
+// contextFiles); runtime values (model, thinking, timeouts, ...) come from
+// opium.json, with the built-in fallbacks below when it sets nothing.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -44,6 +45,12 @@ export interface AgentOverride {
   model?: string;
   thinking?: ThinkingLevel;
   fallbackModels?: string[];
+  timeoutMs?: number;
+  toolTimeoutMs?: number;
+  background?: boolean;
+  permissionAsks?: PermissionAsks;
+  gitGuard?: boolean;
+  skills?: string[];
 }
 
 export type AgentOverrides = Record<string, AgentOverride>;
@@ -75,24 +82,29 @@ const WEB_TOOLS = [
 const KNOWN_KEYS = new Set([
   'name',
   'description',
-  'model',
-  'fallbackModels',
-  'thinking',
   'tools',
-  'skills',
-  'timeoutMs',
-  'toolTimeoutMs',
-  'background',
-  'async',
   'advertise',
   'contextFiles',
   'inheritProjectContext',
-  'permissionAsks',
-  'gitGuard',
   // legacy pi-subagents fields: validated, not used
   'acceptanceRole',
   'defaultContext',
 ]);
+
+// Runtime values that live in opium.json `agents.<name>`, not in the .md.
+// The legacy `async` was the old name of `background`.
+const OPIUM_JSON_KEYS: Record<string, string> = {
+  model: 'model',
+  fallbackModels: 'fallbackModels',
+  thinking: 'thinking',
+  timeoutMs: 'timeoutMs',
+  toolTimeoutMs: 'toolTimeoutMs',
+  background: 'background',
+  async: 'background',
+  permissionAsks: 'permissionAsks',
+  gitGuard: 'gitGuard',
+  skills: 'skills',
+};
 
 const PACKAGE_AGENTS_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -199,6 +211,13 @@ const parseDefinition = (
   const { frontmatter: fm, body } =
     parseFrontmatter<Record<string, unknown>>(raw);
   for (const key of Object.keys(fm)) {
+    const target = OPIUM_JSON_KEYS[key];
+    if (target !== undefined) {
+      throw new Error(
+        `field "${key}" is not allowed in agent .md files; set ` +
+          `"${target}" in opium.json under agents.${name}`,
+      );
+    }
     if (!KNOWN_KEYS.has(key)) throw new Error(`unknown field "${key}"`);
   }
   if (fm.name !== undefined && fm.name !== name) {
@@ -207,14 +226,7 @@ const parseDefinition = (
   if (typeof fm.description !== 'string' || !fm.description.trim()) {
     throw new Error('description is required');
   }
-  exclusive(fm, 'background', 'async');
   exclusive(fm, 'contextFiles', 'inheritProjectContext');
-
-  const fallbackModels = parseList('fallbackModels', fm.fallbackModels).map(
-    (entry) => parseModelId('fallbackModels entry', entry),
-  );
-  const model =
-    fm.model === undefined ? undefined : parseModelId('model', fm.model);
 
   let tools: string[] | undefined;
   const mcpServers: string[] = [];
@@ -236,46 +248,28 @@ const parseDefinition = (
     packages.push('pi-web-access');
   }
 
-  const background = fm.background ?? fm.async;
   const contextFiles = fm.contextFiles ?? fm.inheritProjectContext;
   const agent: AgentDefinition = {
     name,
     description: fm.description.trim(),
     prompt: body.trim(),
-    fallbackModels,
-    models: computeModels(model, fallbackModels),
+    fallbackModels: [],
+    models: computeModels(undefined, []),
     mcpServers,
     packages,
-    skills: parseList('skills', fm.skills),
-    background: optionalBoolean(
-      fm.background === undefined ? 'async' : 'background',
-      background,
-      false,
-    ),
+    skills: [],
+    background: false,
     advertise: optionalBoolean('advertise', fm.advertise, false),
     contextFiles: optionalBoolean(
       fm.contextFiles === undefined ? 'inheritProjectContext' : 'contextFiles',
       contextFiles,
       false,
     ),
-    permissionAsks:
-      fm.permissionAsks === undefined
-        ? 'forward'
-        : parseEnum('permissionAsks', fm.permissionAsks, ['forward', 'deny']),
-    gitGuard: optionalBoolean('gitGuard', fm.gitGuard, true),
+    permissionAsks: 'forward',
+    gitGuard: true,
     file,
   };
-  if (model !== undefined) agent.model = model;
   if (tools !== undefined) agent.tools = tools;
-  if (fm.thinking !== undefined) {
-    agent.thinking = parseEnum('thinking', fm.thinking, LEVELS);
-  }
-  if (fm.timeoutMs !== undefined) {
-    agent.timeoutMs = parsePositive('timeoutMs', fm.timeoutMs);
-  }
-  if (fm.toolTimeoutMs !== undefined) {
-    agent.toolTimeoutMs = parsePositive('toolTimeoutMs', fm.toolTimeoutMs);
-  }
   if (fm.acceptanceRole !== undefined) {
     parseEnum('acceptanceRole', fm.acceptanceRole, ['read-only', 'writer']);
   }
@@ -297,6 +291,18 @@ const withOverride = (
   if (override.fallbackModels !== undefined) {
     merged.fallbackModels = [...override.fallbackModels];
   }
+  if (override.timeoutMs !== undefined) merged.timeoutMs = override.timeoutMs;
+  if (override.toolTimeoutMs !== undefined) {
+    merged.toolTimeoutMs = override.toolTimeoutMs;
+  }
+  if (override.background !== undefined) {
+    merged.background = override.background;
+  }
+  if (override.permissionAsks !== undefined) {
+    merged.permissionAsks = override.permissionAsks;
+  }
+  if (override.gitGuard !== undefined) merged.gitGuard = override.gitGuard;
+  if (override.skills !== undefined) merged.skills = [...override.skills];
   merged.models = computeModels(merged.model, merged.fallbackModels);
   return merged;
 };
@@ -388,11 +394,22 @@ const readJson = (
   return result;
 };
 
+const OVERRIDE_KEYS = [
+  'model',
+  'fallbackModels',
+  'thinking',
+  'timeoutMs',
+  'toolTimeoutMs',
+  'background',
+  'permissionAsks',
+  'gitGuard',
+  'skills',
+];
+
 export const parseOverride = (
   path: string,
   agent: string,
   value: unknown,
-  allowFallbacks: boolean,
   errors: string[],
 ): AgentOverride => {
   const out: AgentOverride = {};
@@ -402,13 +419,9 @@ export const parseOverride = (
   }
   const fail = (message: string) =>
     errors.push(`${path}: override for "${agent}": ${message}`);
-  const allowed = allowFallbacks
-    ? ['model', 'thinking', 'fallbackModels']
-    : ['model', 'thinking'];
   for (const [key, field] of Object.entries(value)) {
-    if (!allowed.includes(key)) {
-      // settings.json carries more pi-subagents fields; opium.json is strict
-      if (allowFallbacks) fail(`unknown field "${key}"`);
+    if (!OVERRIDE_KEYS.includes(key)) {
+      fail(`unknown field "${key}"`);
       continue;
     }
     try {
@@ -416,10 +429,22 @@ export const parseOverride = (
         out.model = parseModelId('model', field);
       } else if (key === 'thinking') {
         out.thinking = parseEnum('thinking', field, LEVELS);
-      } else {
+      } else if (key === 'fallbackModels') {
         out.fallbackModels = parseList('fallbackModels', field).map((entry) =>
           parseModelId('fallbackModels entry', entry),
         );
+      } else if (key === 'timeoutMs' || key === 'toolTimeoutMs') {
+        out[key] = parsePositive(key, field);
+      } else if (key === 'background' || key === 'gitGuard') {
+        out[key] = parseBoolean(key, field);
+      } else if (key === 'permissionAsks') {
+        out.permissionAsks = parseEnum<PermissionAsks>(
+          'permissionAsks',
+          field,
+          ['forward', 'deny'],
+        );
+      } else {
+        out.skills = parseList('skills', field);
       }
     } catch (error) {
       fail(error instanceof Error ? error.message : String(error));
@@ -428,38 +453,11 @@ export const parseOverride = (
   return out;
 };
 
-// Per field, lowest to highest: settings.json `subagents.agentOverrides`
-// (model and thinking only) < the active opium.json preset < opium.json
-// `agents`.
-export const readAgentOverrides = (
-  opiumPath: string,
-  settingsPath: string,
-): ReadOverrides => {
+// Per field, lowest to highest: the built-in fallbacks < the active
+// opium.json preset < opium.json `agents`. This returns the last two.
+export const readAgentOverrides = (opiumPath: string): ReadOverrides => {
   const errors: string[] = [];
   const overrides: AgentOverrides = {};
-
-  const settings = readJson(settingsPath, errors);
-  const subagents = settings?.subagents;
-  const fromSettings = isRecord(subagents)
-    ? subagents.agentOverrides
-    : undefined;
-  if (fromSettings !== undefined) {
-    if (isRecord(fromSettings)) {
-      for (const [agent, value] of Object.entries(fromSettings)) {
-        overrides[agent] = parseOverride(
-          settingsPath,
-          agent,
-          value,
-          false,
-          errors,
-        );
-      }
-    } else {
-      errors.push(
-        `${settingsPath}: subagents.agentOverrides must be an object`,
-      );
-    }
-  }
 
   const opium = readJson(opiumPath, errors);
   if (opium?.preset !== undefined) {
@@ -479,7 +477,7 @@ export const readAgentOverrides = (
       for (const [agent, value] of Object.entries(fromOpium)) {
         overrides[agent] = {
           ...overrides[agent],
-          ...parseOverride(opiumPath, agent, value, true, errors),
+          ...parseOverride(opiumPath, agent, value, errors),
         };
       }
     } else {

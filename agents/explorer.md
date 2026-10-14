@@ -2,11 +2,7 @@
 name: explorer
 description: Fast codebase recon. Use for finding files, locating code patterns and answering "where is X?" questions; returns paths with line numbers and a compressed answer. Runs in the background (needs codegraph).
 advertise: true
-model: openai-codex/gpt-6-luna
-thinking: low
 tools: read, grep, find, ls, mcp:codegraph
-background: true
-timeoutMs: 600000
 ---
 
 You are Explorer - a fast codebase navigation specialist.

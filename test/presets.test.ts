@@ -58,27 +58,44 @@ test('resolvePreset: cycle, missing parent, unknown preset apply nothing', () =>
   assert.match(resolvePreset(raw, 'nope').errors[0], /"nope" not found/);
 });
 
-test('precedence: settings < preset < agents, per field', () => {
+test('precedence: preset < agents, field-wise, including new fields', () => {
   const d = dir();
   const opium = join(d, 'opium.json');
-  const settings = join(d, 'settings.json');
-  write(settings, {
-    subagents: {
-      agentOverrides: {
-        fixer: { model: 's/m', thinking: 'low' },
-        oracle: { model: 's/o' },
-      },
-    },
-  });
   write(opium, {
     preset: 'p',
-    presets: { p: { fixer: { model: 'p/m', thinking: 'high' } } },
-    agents: { fixer: { model: 'a/m' } },
+    presets: {
+      p: {
+        fixer: {
+          model: 'p/m',
+          thinking: 'high',
+          timeoutMs: 5,
+          gitGuard: false,
+        },
+        oracle: { skills: ['s1'], permissionAsks: 'deny' },
+      },
+    },
+    agents: {
+      fixer: { model: 'a/m', timeoutMs: 9, background: true },
+      oracle: { skills: ['s2'] },
+    },
   });
-  const { overrides, errors } = readAgentOverrides(opium, settings);
+  write(join(d, 'settings.json'), {
+    subagents: { agentOverrides: { fixer: { model: 's/m' }, x: {} } },
+  });
+  const { overrides, errors } = readAgentOverrides(opium);
   assert.deepEqual(errors, []);
-  assert.deepEqual(overrides.fixer, { model: 'a/m', thinking: 'high' });
-  assert.deepEqual(overrides.oracle, { model: 's/o' });
+  assert.deepEqual(overrides.fixer, {
+    model: 'a/m',
+    thinking: 'high',
+    timeoutMs: 9,
+    gitGuard: false,
+    background: true,
+  });
+  assert.deepEqual(overrides.oracle, {
+    skills: ['s2'],
+    permissionAsks: 'deny',
+  });
+  assert.equal(overrides.x, undefined);
 });
 
 test('unknown active preset reports an error and applies nothing', () => {
@@ -88,7 +105,7 @@ test('unknown active preset reports an error and applies nothing', () => {
     preset: 'nope',
     presets: { p: { fixer: { model: 'p/m' } } },
   });
-  const { overrides, errors } = readAgentOverrides(opium, join(d, 'x.json'));
+  const { overrides, errors } = readAgentOverrides(opium);
   assert.deepEqual(overrides, {});
   assert.match(errors[0], /"nope" not found/);
 });
@@ -235,18 +252,17 @@ test('opium_preset tool lists, switches, clears and rejects', async () => {
 test('a switch affects only runs started afterwards', async () => {
   const d = dir();
   const opium = join(d, 'opium.json');
-  const settings = join(d, 'settings.json');
   write(opium, CONFIG);
   const agentsDir = join(d, 'agents');
   mkdirSync(agentsDir);
   writeFileSync(
     join(agentsDir, 'fixer.md'),
-    '---\nname: fixer\ndescription: d\nmodel: base/fixer\n---\nbody\n',
+    '---\nname: fixer\ndescription: d\n---\nbody\n',
   );
   const loadDef = (name: string) =>
     loadAgent(name, {
       dirs: [agentsDir],
-      overrides: readAgentOverrides(opium, settings).overrides,
+      overrides: readAgentOverrides(opium).overrides,
     });
   const started: (string | undefined)[] = [];
   const starter: Starter = (def) => {
@@ -275,5 +291,5 @@ test('a switch affects only runs started afterwards', async () => {
   });
   void first;
   void second;
-  assert.deepEqual(started, ['base/fixer', 'c/fixer']);
+  assert.deepEqual(started, [undefined, 'c/fixer']);
 });

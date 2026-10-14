@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ParentContext } from 'pi-agent-runner';
-import { loadAgent, type AgentDefinition } from '../src/agents.ts';
+import {
+  loadAgent,
+  type AgentDefinition,
+  type AgentOverride,
+} from '../src/agents.ts';
 import { buildLaunch, skillResolver } from '../src/launch.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -10,10 +14,15 @@ import { join } from 'node:path';
 
 const parent = {} as ParentContext;
 
-const agent = (fm: string, body = 'PROMPT'): AgentDefinition => {
+// fm is the .md frontmatter; runtime values come from an opium.json override
+const agent = (
+  fm: string,
+  override: AgentOverride = {},
+  body = 'PROMPT',
+): AgentDefinition => {
   const dir = mkdtempSync(join(tmpdir(), 'opium-ln-'));
   writeFileSync(join(dir, 'a.md'), `---\ndescription: d\n${fm}---\n${body}\n`);
-  return loadAgent('a', { dirs: [dir] });
+  return loadAgent('a', { dirs: [dir], overrides: { a: override } });
 };
 
 const base = { parent, cwd: '/work' };
@@ -63,10 +72,15 @@ test('MCP resolution throwing still launches', () => {
 });
 
 test('contextFiles, model, thinking, limits', () => {
-  const def = agent(
-    'contextFiles: true\nmodel: p/m\nfallbackModels: p/n\nthinking: high\n' +
-      'timeoutMs: 5\ntoolTimeoutMs: 7\npermissionAsks: deny\ngitGuard: false\n',
-  );
+  const def = agent('contextFiles: true\n', {
+    model: 'p/m',
+    fallbackModels: ['p/n'],
+    thinking: 'high',
+    timeoutMs: 5,
+    toolTimeoutMs: 7,
+    permissionAsks: 'deny',
+    gitGuard: false,
+  });
   const { start, turn } = buildLaunch(def, base);
   assert.equal(start.noContextFiles, false);
   assert.equal(start.model, 'p/m');
@@ -77,7 +91,7 @@ test('contextFiles, model, thinking, limits', () => {
 });
 
 test('skills are appended; a missing one warns', () => {
-  const def = agent('skills: one, gone\n');
+  const def = agent('', { skills: ['one', 'gone'] });
   const { start, warnings } = buildLaunch(def, {
     ...base,
     resolveSkill: (name) =>

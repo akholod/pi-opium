@@ -1,10 +1,7 @@
 ---
 name: councillor-gamma
 description: Read-only council seat "gamma" (opencode-go/glm-5.3). Independent analysis for /council; dispatched by the council workflow, not directly.
-model: opencode-go/glm-5.3
-thinking: high
 tools: read, grep, find, ls
-timeoutMs: 900000
 ---
 
 You are a councillor in a multi-model council.

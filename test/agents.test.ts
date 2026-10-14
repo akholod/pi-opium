@@ -7,12 +7,15 @@ import { fileURLToPath } from 'node:url';
 import {
   loadAgent,
   loadAgents,
+  parseOverride,
   readAgentOverrides,
   type AgentDefinition,
 } from '../src/agents.ts';
 import { formatToolName, resolveMcpTools } from '../src/mcp.ts';
 
-const agentsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents');
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const agentsDir = join(root, 'agents');
+const defaultsFile = join(root, 'defaults', 'opium.json');
 
 const tmp = (): string => mkdtempSync(join(tmpdir(), 'opium-ag-'));
 
@@ -36,7 +39,6 @@ test('every repo agent file loads', () => {
   };
   assert.equal(agents.size, 11);
   const explorer = get('explorer');
-  assert.equal(explorer.background, true);
   assert.deepEqual(explorer.mcpServers, ['codegraph']);
   assert.deepEqual(explorer.packages, ['pi-mcp-adapter']);
   assert.deepEqual(explorer.tools, ['read', 'grep', 'find', 'ls']);
@@ -45,44 +47,123 @@ test('every repo agent file loads', () => {
   const designer = get('designer');
   assert.equal(designer.tools, undefined);
   assert.equal(designer.contextFiles, true);
-  assert.deepEqual(designer.skills, ['make-interfaces-feel-better']);
+  assert.equal(get('observer').contextFiles, false);
+});
+
+test('an agent with no opium.json entry gets the built-in fallbacks', () => {
+  const { agents } = loadAgents({ dirs: [agentsDir] });
+  for (const agent of agents.values()) {
+    assert.equal(agent.model, undefined, agent.name);
+    assert.deepEqual(agent.models, ['inherit'], agent.name);
+    assert.deepEqual(agent.fallbackModels, [], agent.name);
+    assert.equal(agent.thinking, undefined, agent.name);
+    assert.equal(agent.timeoutMs, undefined, agent.name);
+    assert.equal(agent.toolTimeoutMs, undefined, agent.name);
+    assert.equal(agent.background, false, agent.name);
+    assert.equal(agent.permissionAsks, 'forward', agent.name);
+    assert.equal(agent.gitGuard, true, agent.name);
+    assert.deepEqual(agent.skills, [], agent.name);
+  }
+});
+
+test('defaults/opium.json parses and carries the original values', () => {
+  const { overrides, errors } = readAgentOverrides(defaultsFile);
+  assert.deepEqual(errors, []);
+  const names = [...loadAgents({ dirs: [agentsDir] }).agents.keys()];
+  assert.deepEqual(Object.keys(overrides).sort(), names.sort());
+  assert.equal(names.length, 11);
+  for (const [name, override] of Object.entries(overrides)) {
+    assert.ok(override.model, name);
+    assert.ok(override.thinking, name);
+    assert.ok(override.timeoutMs, name);
+  }
+  const { agents } = loadAgents({ dirs: [agentsDir], overrides });
+  const get = (name: string): AgentDefinition => {
+    const agent = agents.get(name);
+    assert.ok(agent, name);
+    return agent;
+  };
+  assert.equal(get('explorer').model, 'openai-codex/gpt-6-luna');
+  assert.equal(get('explorer').thinking, 'low');
+  assert.equal(get('explorer').background, true);
+  assert.equal(get('explorer').timeoutMs, 600000);
   assert.equal(get('fast-generic').gitGuard, false);
   assert.equal(get('fixer').gitGuard, true);
+  assert.deepEqual(get('fixer').skills, ['pnpm']);
+  assert.deepEqual(get('designer').skills, ['make-interfaces-feel-better']);
+  assert.equal(get('designer').timeoutMs, 1800000);
+  assert.deepEqual(get('oracle').skills, ['simplify']);
   assert.equal(get('oracle').thinking, 'xhigh');
   assert.equal(get('observer').background, false);
+  assert.equal(get('council').model, 'opencode-go/kimi-k3');
+  assert.equal(get('councillor-alpha').model, 'openai-codex/gpt-6-luna');
+  assert.equal(get('councillor-beta').model, 'opencode-go/deepseek-v4-pro');
+  assert.equal(get('councillor-gamma').model, 'opencode-go/glm-5.3');
 });
 
 test('field parsing accepts strings and lists', () => {
   const dir = dirWith({
     x: doc(
-      'background: "true"\ntimeoutMs: "5000"\nskills: [a, b]\n' +
-        'tools: read, mcp:s, web_search\nfallbackModels: p/a, p/b\n' +
-        'model: p/a\npermissionAsks: deny\ndefaultContext: fork\n',
+      'tools: read, mcp:s, web_search\ncontextFiles: "true"\n' +
+        'defaultContext: fork\n',
     ),
   });
   const agent = loadAgent('x', { dirs: [dir] });
-  assert.equal(agent.background, true);
-  assert.equal(agent.timeoutMs, 5000);
-  assert.deepEqual(agent.skills, ['a', 'b']);
   assert.deepEqual(agent.tools, ['read', 'web_search']);
+  assert.deepEqual(agent.mcpServers, ['s']);
   assert.deepEqual(agent.packages, ['pi-mcp-adapter', 'pi-web-access']);
-  assert.deepEqual(agent.models, ['p/a', 'p/b']);
-  assert.equal(agent.permissionAsks, 'deny');
+  assert.equal(agent.contextFiles, true);
+});
+
+test('runtime keys in an .md are an error pointing at opium.json', () => {
+  const keys = [
+    'model: p/m',
+    'fallbackModels: p/a, p/b',
+    'thinking: high',
+    'timeoutMs: 5000',
+    'toolTimeoutMs: 5000',
+    'background: true',
+    'permissionAsks: deny',
+    'gitGuard: false',
+    'skills: pnpm',
+  ];
+  for (const line of keys) {
+    const key = line.split(':')[0];
+    const dir = dirWith({ x: doc(`${line}\n`) });
+    const file = join(dir, 'x.md');
+    assert.throws(
+      () => loadAgent('x', { dirs: [dir] }),
+      (error: Error) =>
+        error.message.startsWith(`${file}: `) &&
+        error.message.includes(`field "${key}"`) &&
+        error.message.includes(`"${key}" in opium.json under agents.x`),
+      line,
+    );
+  }
+  // the legacy name of background points at the current one
+  const legacy = dirWith({ x: doc('async: true\n') });
+  assert.throws(
+    () => loadAgent('x', { dirs: [legacy] }),
+    /field "async".*"background" in opium\.json under agents\.x/,
+  );
+  // loadAgents reports it and keeps the good files
+  const mixed = dirWith({ good: doc(''), bad: doc('model: p/m\n') });
+  const { agents, errors } = loadAgents({ dirs: [mixed] });
+  assert.deepEqual([...agents.keys()], ['good']);
+  assert.match(errors[0], /bad\.md: field "model" is not allowed/);
 });
 
 test('invalid frontmatter names the file and the field', () => {
   const cases: [string, RegExp][] = [
     [doc('bogus: 1\n'), /unknown field "bogus"/],
-    [doc('thinking: ludicrous\n'), /thinking must be one of/],
-    [doc('model: nope\n'), /model must look like provider\/id/],
-    [doc('model: p/\n'), /model must look like provider\/id/],
-    [doc('async: true\nbackground: true\n'), /background and legacy async/],
     [doc('name: other\n'), /name "other" must equal the file name/],
-    ['---\nmodel: a/b\n---\nbody\n', /description is required/],
-    [doc('gitGuard: maybe\n'), /gitGuard must be true or false/],
-    [doc('timeoutMs: -1\n'), /timeoutMs must be a positive number/],
+    ['---\ntools: read\n---\nbody\n', /description is required/],
+    [doc('advertise: maybe\n'), /advertise must be true or false/],
     [doc('acceptanceRole: boss\n'), /acceptanceRole must be one of/],
-    [doc('permissionAsks: ask\n'), /permissionAsks must be one of/],
+    [
+      doc('contextFiles: true\ninheritProjectContext: true\n'),
+      /contextFiles and legacy inheritProjectContext/,
+    ],
   ];
   for (const [text, pattern] of cases) {
     const dir = dirWith({ x: text });
@@ -105,17 +186,17 @@ test('loadAgents keeps good files when one is bad', () => {
 });
 
 test('a user file overrides the package file as a whole', () => {
-  const user = dirWith({ x: doc('model: u/m\n') });
-  const pkg = dirWith({ x: doc('model: p/m\nthinking: high\n'), y: doc('') });
+  const user = dirWith({ x: doc('tools: read\n') });
+  const pkg = dirWith({ x: doc('tools: grep\nadvertise: true\n'), y: doc('') });
   const { agents } = loadAgents({ dirs: [user, pkg] });
-  assert.equal(agents.get('x')?.model, 'u/m');
-  assert.equal(agents.get('x')?.thinking, undefined);
+  assert.deepEqual(agents.get('x')?.tools, ['read']);
+  assert.equal(agents.get('x')?.advertise, false);
   assert.ok(agents.has('y'));
-  assert.equal(loadAgent('x', { dirs: [user, pkg] }).model, 'u/m');
+  assert.deepEqual(loadAgent('x', { dirs: [user, pkg] }).tools, ['read']);
 });
 
-test('overrides apply on top of the file and recompute models', () => {
-  const dir = dirWith({ x: doc('model: p/m\nthinking: low\n') });
+test('overrides apply on top of the fallbacks and recompute models', () => {
+  const dir = dirWith({ x: doc('') });
   const agent = loadAgent('x', {
     dirs: [dir],
     overrides: {
@@ -127,35 +208,106 @@ test('overrides apply on top of the file and recompute models', () => {
   assert.deepEqual(agent.models, ['q/n', 'q/o']);
 });
 
-test('readAgentOverrides: opium.json wins per field, settings is limited', () => {
+test('every override field applies over the built-in fallbacks', () => {
+  const dir = dirWith({ x: doc('') });
+  const agent = loadAgent('x', {
+    dirs: [dir],
+    overrides: {
+      x: {
+        timeoutMs: 111,
+        toolTimeoutMs: 222,
+        background: true,
+        permissionAsks: 'deny',
+        gitGuard: false,
+        skills: ['a', 'b'],
+      },
+    },
+  });
+  assert.equal(agent.timeoutMs, 111);
+  assert.equal(agent.toolTimeoutMs, 222);
+  assert.equal(agent.background, true);
+  assert.equal(agent.permissionAsks, 'deny');
+  assert.equal(agent.gitGuard, false);
+  assert.deepEqual(agent.skills, ['a', 'b']);
+});
+
+test('parseOverride accepts the full field list', () => {
+  const errors: string[] = [];
+  const out = parseOverride(
+    'o.json',
+    'a',
+    {
+      model: 'p/m',
+      fallbackModels: ['p/f'],
+      thinking: 'high',
+      timeoutMs: 5,
+      toolTimeoutMs: '7',
+      background: 'true',
+      permissionAsks: 'deny',
+      gitGuard: false,
+      skills: 'x, y',
+    },
+    errors,
+  );
+  assert.deepEqual(errors, []);
+  assert.deepEqual(out, {
+    model: 'p/m',
+    fallbackModels: ['p/f'],
+    thinking: 'high',
+    timeoutMs: 5,
+    toolTimeoutMs: 7,
+    background: true,
+    permissionAsks: 'deny',
+    gitGuard: false,
+    skills: ['x', 'y'],
+  });
+});
+
+test('parseOverride: an invalid value is an error and the field is ignored', () => {
+  const bad: Record<string, unknown> = {
+    model: 'nope',
+    fallbackModels: ['nope'],
+    thinking: 'wild',
+    timeoutMs: -1,
+    toolTimeoutMs: 'x',
+    background: 'maybe',
+    permissionAsks: 'ask',
+    gitGuard: 3,
+    skills: 5,
+  };
+  for (const [key, value] of Object.entries(bad)) {
+    const errors: string[] = [];
+    const out = parseOverride('o.json', 'a', { [key]: value }, errors);
+    assert.equal(errors.length, 1, key);
+    assert.match(errors[0], new RegExp(key), key);
+    assert.deepEqual(out, {}, key);
+  }
+});
+
+test('readAgentOverrides reads only opium.json; settings.json is ignored', () => {
   const dir = tmp();
   const opium = join(dir, 'opium.json');
-  const settings = join(dir, 'settings.json');
   writeFileSync(
     opium,
     JSON.stringify({
       orchestrator: true,
-      agents: {
-        a: { model: 'o/m' },
-        b: { fallbackModels: ['o/f'] },
-      },
+      agents: { a: { model: 'o/m' }, b: { fallbackModels: ['o/f'] } },
     }),
   );
   writeFileSync(
-    settings,
+    join(dir, 'settings.json'),
     JSON.stringify({
       subagents: {
-        agentOverrides: {
-          a: { model: 's/m', thinking: 'low', fallbackModels: ['s/f'] },
-          b: { model: 's/b', tools: ['x'] },
-        },
+        agentOverrides: { a: { model: 's/m', thinking: 'low' }, c: {} },
       },
     }),
   );
-  const { overrides, errors } = readAgentOverrides(opium, settings);
+  const { overrides, errors } = readAgentOverrides(opium);
   assert.deepEqual(errors, []);
-  assert.deepEqual(overrides.a, { model: 'o/m', thinking: 'low' });
-  assert.deepEqual(overrides.b, { model: 's/b', fallbackModels: ['o/f'] });
+  assert.deepEqual(overrides, {
+    a: { model: 'o/m' },
+    b: { fallbackModels: ['o/f'] },
+  });
 });
 
 test('readAgentOverrides reports invalid entries without throwing', () => {
@@ -165,16 +317,13 @@ test('readAgentOverrides reports invalid entries without throwing', () => {
     opium,
     JSON.stringify({ agents: { a: { model: 'bad', zzz: 1 }, b: 5 } }),
   );
-  const { overrides, errors } = readAgentOverrides(
-    opium,
-    join(dir, 'missing.json'),
-  );
+  const { overrides, errors } = readAgentOverrides(opium);
   assert.equal(errors.length, 3);
   assert.ok(errors.every((e) => e.startsWith(opium)));
   assert.deepEqual(overrides.a, {});
   const broken = join(dir, 'broken.json');
   writeFileSync(broken, '{nope');
-  assert.match(readAgentOverrides(broken, broken).errors[0], /invalid JSON/);
+  assert.match(readAgentOverrides(broken).errors[0], /invalid JSON/);
 });
 
 // ---- MCP tool resolution ----

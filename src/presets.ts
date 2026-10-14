@@ -3,8 +3,8 @@
 //     "presets": {
 //       "base": { "fixer": { "model": "a/b" } },
 //       "cheap": { "extends": "base", "oracle": { "thinking": "low" } } } }
-// The active preset sits between settings.json `subagents.agentOverrides`
-// and opium.json `agents` (same order as oh-my-opencode-slim). Switching only
+// The active preset sits between the built-in fallbacks and opium.json
+// `agents` (same order as oh-my-opencode-slim). Switching only
 // rewrites the `preset` key; runs read overrides when they start.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -97,7 +97,7 @@ export const resolvePreset = (
         errors.push(`${path}: preset "${link}": bad agent name "${agent}"`);
         continue;
       }
-      own[agent] = parseOverride(path, `${link}.${agent}`, value, true, errors);
+      own[agent] = parseOverride(path, `${link}.${agent}`, value, errors);
     }
     mergeInto(overrides, own);
   }
@@ -185,14 +185,14 @@ export interface PresetReply {
   error: boolean;
 }
 
-const effectiveLines = (opiumPath: string, settingsPath: string): string[] => {
-  const { overrides } = readAgentOverrides(opiumPath, settingsPath);
+const effectiveLines = (opiumPath: string): string[] => {
+  const { overrides } = readAgentOverrides(opiumPath);
   return Object.entries(overrides)
     .filter(([, o]) => o.model !== undefined || o.thinking !== undefined)
     .map(([agent, o]) => `  ${agent}: ${summarize(o)}`);
 };
 
-const renderList = (opiumPath: string, settingsPath: string): string => {
+const renderList = (opiumPath: string): string => {
   const { presets, active, errors } = listPresets(opiumPath);
   if (presets.length === 0) return 'no presets defined in opium.json';
   const lines = [`presets (active: ${active ?? 'none'}):`];
@@ -203,7 +203,7 @@ const renderList = (opiumPath: string, settingsPath: string): string => {
       lines.push(`    ${agent}: ${summary}`);
     }
   }
-  const effective = effectiveLines(opiumPath, settingsPath);
+  const effective = effectiveLines(opiumPath);
   if (effective.length > 0) lines.push('effective overrides:', ...effective);
   for (const error of errors) lines.push(`warning: ${error}`);
   return lines.join('\n');
@@ -213,12 +213,11 @@ const renderList = (opiumPath: string, settingsPath: string): string => {
 // clears; anything else switches.
 export const applyPresetCommand = (
   opiumPath: string,
-  settingsPath: string,
   arg: string | undefined,
 ): PresetReply => {
   const name = arg?.trim() ?? '';
   if (name === '') {
-    return { text: renderList(opiumPath, settingsPath), error: false };
+    return { text: renderList(opiumPath), error: false };
   }
   try {
     if (name === 'off') {

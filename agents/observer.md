@@ -2,10 +2,7 @@
 name: observer
 description: Visual analysis of images, screenshots, PDFs and diagrams. Extracts structured observations and exact text without loading raw files into the orchestrator context. Always pass the full file path.
 advertise: true
-model: openai-codex/gpt-6-luna
-thinking: low
 tools: read
-timeoutMs: 600000
 ---
 
 You are Observer - a visual analysis specialist.

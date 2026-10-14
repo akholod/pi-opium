@@ -45,18 +45,72 @@ The council is also available to the model as the `council` tool.
 
 ## Agents
 
-Agent prompts, models, tools and limits are in `agents/*.md`; copy a file to
-`~/.pi/agent/agents/` to override it. To change only the model or thinking
-level, add an entry to `~/.pi/agent/opium.json`:
+Agent prompts are in `agents/*.md`, with structural metadata only (`name`,
+`description`, `tools`, `advertise`, `contextFiles`); copy a file to
+`~/.pi/agent/agents/` to replace it. A runtime key (`model`, `thinking`,
+`timeoutMs`, ...) in an `.md` is an error: those values live in
+`~/.pi/agent/opium.json`, the single configuration file. The shipped defaults
+for every agent are in `defaults/opium.json`; on first run, when
+`~/.pi/agent/opium.json` does not exist, it is created as a copy of them. An
+existing file is never touched or merged with the defaults. Example:
 
 ```json
 {
+  "orchestrator": true,
+  "wake": { "enabled": true, "intervalMs": 300000 },
+  "preset": "cheap",
+  "presets": {
+    "base": { "fixer": { "model": "openai-codex/gpt-6-sol" } },
+    "cheap": { "extends": "base", "oracle": { "thinking": "low" } }
+  },
   "agents": {
-    "oracle": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" }
+    "oracle": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
+    "fixer": { "timeoutMs": 900000, "gitGuard": true, "skills": ["tdd"] },
+    "councillor-alpha": {
+      "model": "openai-codex/gpt-6-sol",
+      "fallbackModels": ["claude-bridge/claude-fable-5-1"]
+    },
+    "councillor-beta": {
+      "model": "claude-bridge/claude-fable-5-1",
+      "fallbackModels": ["openai-codex/gpt-6-sol"]
+    },
+    "councillor-gamma": { "model": "claude-bridge/claude-opus-5-5" },
+    "council": { "model": "claude-bridge/claude-fable-5-1" }
   }
 }
 ```
 
-Without an entry there, `subagents.agentOverrides` in
-`~/.pi/agent/settings.json` (model and thinking) still applies. Run
-transcripts are kept in `~/.pi/agent/opium/runs/`.
+- `orchestrator`: enable the orchestrator prompt (`/orchestrator on|off`).
+- `wake { enabled, intervalMs }`: periodic wake-up for running background
+  agents.
+- `preset` / `presets`: named sets of per-agent overrides; a preset may
+  `extends` another. `/opium-preset [name|off]` lists or switches.
+- `agents.<name>`: per-agent overrides, also valid inside a preset. Council
+  seats (`councillor-alpha|beta|gamma`) and the synthesizer (`council`) are
+  ordinary agents and use the same overrides.
+
+Override fields (unknown fields are errors; an invalid value is reported as a
+warning and that field is ignored). When `opium.json` sets nothing for an
+agent, the built-in fallbacks apply: model `inherit` (the parent session's),
+thinking inherited, no timeouts, `background` false, `permissionAsks`
+`forward`, `gitGuard` true, no skills.
+
+| Field            | Value                                                     |
+| ---------------- | --------------------------------------------------------- |
+| `model`          | `provider/id`                                             |
+| `fallbackModels` | list of `provider/id`                                     |
+| `thinking`       | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `timeoutMs`      | positive number                                           |
+| `toolTimeoutMs`  | positive number                                           |
+| `background`     | `true` / `false`                                          |
+| `permissionAsks` | `forward` or `deny`                                       |
+| `gitGuard`       | `true` / `false`                                          |
+| `skills`         | list of skill names                                       |
+
+Precedence, per field, lowest to highest: the built-in fallbacks < the active
+preset < `agents`.
+
+`~/.pi/agent/settings.json` is no longer read: `subagents.agentOverrides`
+there has no effect, so move those values into `agents` in `opium.json`.
+
+Run transcripts are kept in `~/.pi/agent/opium/runs/`.

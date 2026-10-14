@@ -8,11 +8,9 @@
 //   - /council <question> and the `council` tool: three councillors on
 //     different models in parallel, then a synthesized report
 
-import { join } from 'node:path';
 import { Type } from 'typebox';
 import {
   CONFIG_DIR_NAME,
-  getAgentDir,
   type ExtensionAPI,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
@@ -21,6 +19,7 @@ import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import {
   readState,
   readWakeSettings,
+  seedDefaults,
   statePath,
   writeState,
 } from '../src/state.ts';
@@ -47,10 +46,7 @@ import { renderSeats, runCouncil, type CouncilResult } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
 
-const settingsFile = () => join(getAgentDir(), 'settings.json');
-
-const agentOverrides = (path: string) =>
-  readAgentOverrides(path, settingsFile());
+const agentOverrides = (path: string) => readAgentOverrides(path);
 
 const formatUsage = ({ usage }: CouncilResult): string => {
   const tokens = usage.input + usage.output;
@@ -79,6 +75,8 @@ export interface OpiumDeps {
   starter?: Starter;
   // run metadata and transcripts; defaults to ~/.pi/agent/opium/runs
   runsDir?: string;
+  // shipped defaults copied to opium.json on first run; tests inject theirs
+  defaultsPath?: string;
   // idle-wake timing; tests inject fake timers
   wake?: {
     intervalMs?: number;
@@ -91,6 +89,7 @@ const WAIT_REASON_LIMIT = 500;
 
 export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   const path = statePath(CONFIG_DIR_NAME);
+  seedDefaults(path, deps.defaultsPath);
   // watch permission dialogs from the start so a run never misses one
   humanWaitTracker(pi.events);
   // slim guards every session, whether or not the orchestrator is on
@@ -322,7 +321,7 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
       'Switch the per-agent model preset for new runs: ' +
       '/opium-preset [name|off] (no argument lists presets)',
     handler: async (args, ctx) => {
-      const reply = applyPresetCommand(path, settingsFile(), args);
+      const reply = applyPresetCommand(path, args);
       ctx.ui.notify(`[opium] ${reply.text}`, reply.error ? 'error' : 'info');
     },
   });
@@ -341,7 +340,7 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
       ),
     }),
     async execute(_toolCallId, params) {
-      const reply = applyPresetCommand(path, settingsFile(), params.name);
+      const reply = applyPresetCommand(path, params.name);
       // pi treats a tool call as failed only when execute throws
       if (reply.error) throw new Error(reply.text);
       return {

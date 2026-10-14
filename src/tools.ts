@@ -2,12 +2,10 @@
 // agent_result, agent_message, agent_cancel, agent_revive. The handlers are
 // pure over injected dependencies; registerAgentTools wires them into Pi.
 
-import { join } from 'node:path';
 import { isPossiblyStuck } from 'pi-agent-runner';
 import { Type } from 'typebox';
 import {
   CONFIG_DIR_NAME,
-  getAgentDir,
   type ExtensionAPI,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
@@ -376,10 +374,7 @@ export const agentCancel = async (
 // ---- Pi registration ----
 
 export const defaultLoadDef = (name: string): AgentDefinition => {
-  const { overrides } = readAgentOverrides(
-    statePath(CONFIG_DIR_NAME),
-    join(getAgentDir(), 'settings.json'),
-  );
+  const { overrides } = readAgentOverrides(statePath(CONFIG_DIR_NAME));
   return loadAgent(name, { overrides });
 };
 

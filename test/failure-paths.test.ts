@@ -116,7 +116,13 @@ const setup = (starter?: Starter) => {
     return { handle, turn: {}, warnings: [] };
   };
   const runsDir = mkdtempSync(join(tmpdir(), 'opium-fp-'));
-  createOpium(pi, { starter: starter ?? defaultStarter, runsDir });
+  // a missing defaults file: never seed the real ~/.pi/agent/opium.json
+  const defaultsPath = join(runsDir, 'no-defaults.json');
+  createOpium(pi, {
+    starter: starter ?? defaultStarter,
+    runsDir,
+    defaultsPath,
+  });
   const fire = async (name: string) => {
     for (const fn of handlers.get(name) ?? []) await fn({}, ctx);
   };

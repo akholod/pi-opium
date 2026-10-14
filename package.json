@@ -23,6 +23,7 @@
     "extensions",
     "src",
     "agents",
+    "defaults",
     "skills",
     "README.md"
   ],

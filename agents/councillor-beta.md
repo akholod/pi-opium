@@ -1,10 +1,7 @@
 ---
 name: councillor-beta
 description: Read-only council seat "beta" (opencode-go/deepseek-v4-pro). Independent analysis for /council; dispatched by the council workflow, not directly.
-model: opencode-go/deepseek-v4-pro
-thinking: high
 tools: read, grep, find, ls
-timeoutMs: 900000
 ---
 
 You are a councillor in a multi-model council.

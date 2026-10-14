@@ -1,26 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFrontmatter } from '@earendil-works/pi-coding-agent';
+import {
+  parseFrontmatter,
+  type ExtensionAPI,
+} from '@earendil-works/pi-coding-agent';
 import type {
   ParentContext,
   RunAgentOptions,
   RunAgentResult,
 } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { loadAgent } from '../src/agents.ts';
+import { loadAgent, readAgentOverrides } from '../src/agents.ts';
 import { runCouncil } from '../src/council.ts';
-import { readState, writeState, DEFAULT_STATE } from '../src/state.ts';
+import {
+  readState,
+  seedDefaults,
+  writeState,
+  DEFAULT_STATE,
+} from '../src/state.ts';
+import { createOpium } from '../extensions/opium.ts';
 
 const parent = {
   events: { emit() {}, on: () => () => {} },
   ctx: {},
 } as unknown as ParentContext;
 
-const agentsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents');
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const agentsDir = join(root, 'agents');
+// the shipped runtime values, as a user's seeded opium.json would hold them
+const shipped = readAgentOverrides(join(root, 'defaults', 'opium.json'));
 const agentBody = (name: string): string =>
   parseFrontmatter(
     readFileSync(join(agentsDir, `${name}.md`), 'utf8'),
@@ -99,13 +111,56 @@ test('writeState preserves other keys in the file', () => {
   });
 });
 
+test('seedDefaults copies the defaults only when opium.json is missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-seed-'));
+  const defaults = join(dir, 'defaults.json');
+  writeFileSync(defaults, '{"orchestrator":true,"agents":{"a":{}}}\n');
+  // the config directory is created on demand
+  const path = join(dir, 'home', '.pi', 'agent', 'opium.json');
+  assert.equal(seedDefaults(path, defaults), true);
+  assert.equal(readFileSync(path, 'utf8'), readFileSync(defaults, 'utf8'));
+  // an existing file is never touched or merged
+  writeFileSync(path, '{"orchestrator":false}');
+  assert.equal(seedDefaults(path, defaults), false);
+  assert.equal(readFileSync(path, 'utf8'), '{"orchestrator":false}');
+  // no defaults file: nothing is created
+  const other = join(dir, 'other', 'opium.json');
+  assert.equal(seedDefaults(other, join(dir, 'missing.json')), false);
+  assert.equal(existsSync(other), false);
+});
+
+test('createOpium seeds opium.json at load, leaves an existing one', () => {
+  const home = mkdtempSync(join(tmpdir(), 'opium-home-'));
+  const defaults = join(home, 'defaults.json');
+  writeFileSync(defaults, '{"orchestrator":false,"agents":{}}\n');
+  const pi = {
+    events: { emit() {}, on: () => () => {} },
+    on() {},
+    registerTool() {},
+    registerCommand() {},
+    sendMessage() {},
+  } as unknown as ExtensionAPI;
+  const load = () => {
+    const previous = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      createOpium(pi, { runsDir: join(home, 'runs'), defaultsPath: defaults });
+    } finally {
+      process.env.HOME = previous;
+    }
+  };
+  const path = join(home, '.pi', 'agent', 'opium.json');
+  load();
+  assert.equal(readFileSync(path, 'utf8'), readFileSync(defaults, 'utf8'));
+  writeFileSync(path, '{"orchestrator":true}');
+  load();
+  assert.equal(readFileSync(path, 'utf8'), '{"orchestrator":true}');
+});
+
 // the councillor prompts are identical; the models tell the agents apart
 const agentOf = (model: string | undefined): string =>
   ['councillor-alpha', 'councillor-beta', 'councillor-gamma', 'council'].find(
-    (name) =>
-      parseFrontmatter<{ model?: string }>(
-        readFileSync(join(agentsDir, `${name}.md`), 'utf8'),
-      ).frontmatter.model === model,
+    (name) => shipped.overrides[name]?.model === model,
   ) ?? 'unknown';
 
 const fake = (answers: Record<string, RunAgentResult['status']> = {}) => {
@@ -139,7 +194,12 @@ const fake = (answers: Record<string, RunAgentResult['status']> = {}) => {
   return { runAgent, calls };
 };
 
-const base = { parent, cwd: '/tmp', agentDirs: [agentsDir] };
+const base = {
+  parent,
+  cwd: '/tmp',
+  agentDirs: [agentsDir],
+  overrides: shipped.overrides,
+};
 
 test('council: councillors in parallel, then synthesis', async () => {
   const f = fake();
@@ -211,6 +271,37 @@ test('council: all seats failed -> failed; cancelled -> aborted', async () => {
     runAgent: cancelled.runAgent,
   });
   assert.equal(aborted.outcome, 'aborted');
+});
+
+test('council: without opium.json values the seats inherit the model', async () => {
+  const calls: RunAgentOptions[] = [];
+  const result = await runCouncil({
+    parent,
+    cwd: '/tmp',
+    question: 'q',
+    agentDirs: [agentsDir],
+    runAgent: async (opts) => {
+      calls.push(opts);
+      const usage = {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0,
+        turns: 1,
+        toolCalls: 0,
+        durationMs: 1,
+        waitedMs: 0,
+      };
+      return { status: 'completed', value: 'ok', usage };
+    },
+  });
+  assert.equal(result.outcome, 'completed', result.error);
+  assert.equal(calls.length, 4);
+  for (const call of calls) {
+    assert.equal(call.model, 'inherit');
+    assert.equal(call.thinking, undefined);
+  }
 });
 
 test('council: explicit timeoutMs overrides the agent file', async () => {
@@ -288,18 +379,26 @@ const scripted = (script: Script) => {
   return { runAgent, calls };
 };
 
-const fallbackDir = (council = '') => {
+// agent files hold the prompt only; models and fallbacks are overrides
+const fallbackDir = (council: string[] = []) => {
   const dir = mkdtempSync(join(tmpdir(), 'opium-fb-'));
-  const fm = (name: string, extra: string) =>
-    `---\ndescription: d\nmodel: p/${name}\n${extra}---\n${name}\n`;
-  writeFileSync(
-    join(dir, 'councillor-alpha.md'),
-    fm('alpha', 'fallbackModels: p/alpha2, p/alpha3\n'),
-  );
-  writeFileSync(join(dir, 'councillor-beta.md'), fm('beta', ''));
-  writeFileSync(join(dir, 'councillor-gamma.md'), fm('gamma', ''));
-  writeFileSync(join(dir, 'council.md'), fm('council', council));
-  return dir;
+  for (const name of ['alpha', 'beta', 'gamma', 'council']) {
+    const file = name === 'council' ? name : `councillor-${name}`;
+    writeFileSync(
+      join(dir, `${file}.md`),
+      `---\ndescription: d\n---\n${name}\n`,
+    );
+  }
+  const overrides = {
+    'councillor-alpha': {
+      model: 'p/alpha',
+      fallbackModels: ['p/alpha2', 'p/alpha3'],
+    },
+    'councillor-beta': { model: 'p/beta' },
+    'councillor-gamma': { model: 'p/gamma' },
+    council: { model: 'p/council', fallbackModels: council },
+  };
+  return { agentDirs: [dir], overrides };
 };
 
 test('council fallback: failed primary falls back to the next model', async () => {
@@ -308,7 +407,7 @@ test('council fallback: failed primary falls back to the next model', async () =
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir()],
+    ...fallbackDir(),
     runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'completed', result.error);
@@ -328,12 +427,12 @@ test('council fallback: failed primary falls back to the next model', async () =
 
 test('council fallback: empty answers retry the same model once', async () => {
   const retried = scripted({ 'alpha|p/alpha': ['', 'answer'] });
-  const dir = fallbackDir();
+  const fb = fallbackDir();
   const r1 = await runCouncil({
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [dir],
+    ...fb,
     runAgent: retried.runAgent,
   });
   assert.equal(r1.seats[0].ok, true);
@@ -348,7 +447,7 @@ test('council fallback: empty answers retry the same model once', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [dir],
+    ...fb,
     runAgent: moved.runAgent,
     onProgress: (m) => progress.push(m),
   });
@@ -375,7 +474,7 @@ test('council fallback: exhausted chain fails the seat only', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir()],
+    ...fallbackDir(),
     runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'completed', result.error);
@@ -400,7 +499,7 @@ test('council fallback: exhausted chain fails the seat only', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir()],
+    ...fallbackDir(),
     runAgent: empty.runAgent,
   });
   assert.equal(r2.seats[0].status, 'failed');
@@ -413,7 +512,7 @@ test('council fallback: cancelled stops without fallback', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir()],
+    ...fallbackDir(),
     runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'aborted');
@@ -428,7 +527,7 @@ test('council fallback: synthesizer falls back too', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir('fallbackModels: p/council2\n')],
+    ...fallbackDir(['p/council2']),
     runAgent: f.runAgent,
   });
   assert.equal(result.outcome, 'completed', result.error);
@@ -443,31 +542,37 @@ test('council fallback: synthesizer falls back too', async () => {
     parent,
     cwd: '/tmp',
     question: 'q',
-    agentDirs: [fallbackDir('fallbackModels: p/council2\n')],
+    ...fallbackDir(['p/council2']),
     runAgent: dead.runAgent,
   });
   assert.equal(failed.outcome, 'failed');
   assert.equal(failed.error, 'council synthesis failed: failed err');
 });
 
-test('loader: fallbackModels parses strings and lists, validates', () => {
-  const load = (fm: string) => {
-    const dir = mkdtempSync(join(tmpdir(), 'opium-ld-'));
-    writeFileSync(join(dir, 'x.md'), `---\ndescription: d\n${fm}---\nbody\n`);
-    return () => loadAgent('x', { dirs: [dir] });
+test('opium.json: fallbackModels parses strings and lists, validates', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-ld-'));
+  writeFileSync(join(dir, 'x.md'), '---\ndescription: d\n---\nbody\n');
+  const load = (agent: Record<string, unknown>) => {
+    const opium = join(dir, 'opium.json');
+    writeFileSync(opium, JSON.stringify({ agents: { x: agent } }));
+    const { overrides, errors } = readAgentOverrides(opium);
+    const models = loadAgent('x', { dirs: [dir], overrides }).models;
+    return { models, errors };
   };
-  assert.deepEqual(load('model: a/b\nfallbackModels: c/d, e/f\n')().models, [
+  assert.deepEqual(load({ model: 'a/b', fallbackModels: 'c/d, e/f' }).models, [
     'a/b',
     'c/d',
     'e/f',
   ]);
   assert.deepEqual(
-    load('model: a/b\nfallbackModels:\n  - c/d\n  - a/b\n')().models,
+    load({ model: 'a/b', fallbackModels: ['c/d', 'a/b'] }).models,
     ['a/b', 'c/d'],
   );
-  assert.deepEqual(load('fallbackModels: \n')().models, ['inherit']);
-  assert.deepEqual(load('fallbackModels: []\n')().models, ['inherit']);
-  assert.deepEqual(load('')().models, ['inherit']);
-  assert.throws(load('fallbackModels: c/d, nope\n'), /x\.md: fallbackModels/);
-  assert.throws(load('fallbackModels: c/\n'), /fallbackModels/);
+  assert.deepEqual(load({ fallbackModels: [] }).models, ['inherit']);
+  assert.deepEqual(load({}).models, ['inherit']);
+  for (const bad of ['c/d, nope', 'c/']) {
+    const { errors } = load({ fallbackModels: bad });
+    assert.equal(errors.length, 1, bad);
+    assert.match(errors[0], /fallbackModels/);
+  }
 });

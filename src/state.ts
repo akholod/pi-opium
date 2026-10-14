@@ -1,9 +1,16 @@
 // Persistent on/off switch for the orchestrator prompt:
 // `~/.pi/agent/opium.json` -> { "orchestrator": true }. Default on.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface CrewState {
   orchestrator: boolean;
@@ -13,6 +20,27 @@ export const DEFAULT_STATE: CrewState = { orchestrator: true };
 
 export const statePath = (configDirName: string, homeDir = homedir()): string =>
   join(homeDir, configDirName, 'agent', 'opium.json');
+
+// Shipped defaults: every agent's runtime values, copied to the user's
+// opium.json on first run.
+export const DEFAULTS_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'defaults',
+  'opium.json',
+);
+
+// Copies the shipped defaults when the user has no opium.json yet. An
+// existing file is never touched or merged.
+export const seedDefaults = (
+  path: string,
+  defaultsPath = DEFAULTS_PATH,
+): boolean => {
+  if (existsSync(path) || !existsSync(defaultsPath)) return false;
+  mkdirSync(dirname(path), { recursive: true });
+  copyFileSync(defaultsPath, path);
+  return true;
+};
 
 export const readState = (path: string): CrewState => {
   if (!existsSync(path)) return DEFAULT_STATE;

@@ -2,13 +2,8 @@
 name: oracle
 description: Strategic technical advisor and code reviewer. Use for architecture decisions, problems persisting after 2+ fix attempts, high-risk refactors, complex debugging, code review and simplification. Read-only, advises, does not implement. Runs in the background (needs codegraph).
 advertise: true
-model: openai-codex/gpt-6-astra
-thinking: xhigh
 tools: read, grep, find, ls, mcp:codegraph
-skills: simplify
 contextFiles: true
-background: true
-timeoutMs: 1200000
 ---
 
 You are Oracle - a strategic technical advisor and code reviewer.
