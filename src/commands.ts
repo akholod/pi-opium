@@ -117,7 +117,7 @@ export function reflectPrompt(
     'Reflect requirements:',
     '- inspect existing skills, prompts, agents/ role prompts, commands, MCP permissions, config, and project playbooks (AGENTS.md, .opium/) before suggesting anything new;',
     '- base findings on evidence in the digest below, the current conversation, project notes, or other artifacts that are safe to inspect; prefer repeated recent behavior over speculation;',
-    '- look at how Opium tools were used: agent, agent_status, agent_result, agent_message, agent_cancel, agent_revive, council, wait_for_user; at specialist choice (explorer, librarian, oracle, designer, fixer, fast-generic, observer); and at Spiral flows (/ralplan, /ralph) — flag wrong delegation, wasted waits, repeated manual steps, missed reviews;',
+    '- look at how Opium tools were used: agent, agent_status, agent_result, agent_message, agent_cancel, agent_revive, council, wait_for_user; at specialist choice (scout, researcher, senior, designer, fixer, fast-generic, vision); and at Spiral flows (/ralplan, /ralph) — flag wrong delegation, wasted waits, repeated manual steps, missed reviews;',
     '- recommend the smallest useful improvement: prompt/config rule, skill, command, custom agent, MCP/tool permission change, project playbook, or skip;',
     '- change nothing is a valid result when evidence is weak;',
     '- ask before changing prompts, skills, commands, agents, MCP access, or config unless the user explicitly requested the exact edit;',

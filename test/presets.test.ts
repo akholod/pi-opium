@@ -23,7 +23,7 @@ test('resolvePreset: names, strict fields, extends chain', () => {
       child: {
         extends: 'base',
         fixer: { model: 'a/two' },
-        oracle: { model: 'b/x' },
+        senior: { model: 'b/x' },
       },
       'bad name': {},
       typo: { fixer: { modle: 'a/b' } },
@@ -33,7 +33,7 @@ test('resolvePreset: names, strict fields, extends chain', () => {
   assert.deepEqual(ok.errors, []);
   assert.deepEqual(ok.overrides, {
     fixer: { model: 'a/two', thinking: 'low' },
-    oracle: { model: 'b/x' },
+    senior: { model: 'b/x' },
   });
   for (const name of ['bad name', '__proto__', 'constructor', 'prototype']) {
     assert.match(resolvePreset(raw, name).errors[0], /invalid preset name/);
@@ -73,12 +73,12 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
           wrapUpMs: 7,
           gitGuard: false,
         },
-        oracle: { skills: ['s1'], permissionAsks: 'deny' },
+        senior: { skills: ['s1'], permissionAsks: 'deny' },
       },
     },
     agents: {
       fixer: { model: 'a/m', timeoutMs: 9, wrapUpMs: 11, background: true },
-      oracle: { skills: ['s2'] },
+      senior: { skills: ['s2'] },
     },
   });
   write(join(d, 'settings.json'), {
@@ -95,11 +95,42 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
     gitGuard: false,
     background: true,
   });
-  assert.deepEqual(overrides.oracle, {
+  assert.deepEqual(overrides.senior, {
     skills: ['s2'],
     permissionAsks: 'deny',
   });
   assert.equal(overrides.x, undefined);
+});
+
+test('presets.<p>.<legacy> applies to the new agent with a warning; the new key wins', () => {
+  const opium = join(dir(), 'opium.json');
+  write(opium, {
+    preset: 'p',
+    presets: {
+      base: { librarian: { model: 'b/m', thinking: 'low' } },
+      p: {
+        extends: 'base',
+        observer: { model: 'o/old', skills: ['s'] },
+        vision: { model: 'o/new' },
+      },
+    },
+  });
+  const { overrides, errors } = readAgentOverrides(opium);
+  assert.deepEqual(errors, [
+    `${opium}: preset "base": agent "librarian" was renamed to ` +
+      '"researcher"; rename the key',
+    `${opium}: preset "p": agent "observer" was renamed to "vision"; ` +
+      'rename the key',
+  ]);
+  assert.deepEqual(overrides, {
+    researcher: { model: 'b/m', thinking: 'low' },
+    vision: { model: 'o/new', skills: ['s'] },
+  });
+  const listed = listPresets(opium).presets.find((p) => p.name === 'p');
+  assert.deepEqual(Object.keys(listed?.agents ?? {}).sort(), [
+    'researcher',
+    'vision',
+  ]);
 });
 
 test('unknown active preset reports an error and applies nothing', () => {
@@ -142,7 +173,7 @@ test('listPresets reports parent, active and inherited summary', () => {
     preset: 'c',
     presets: {
       b: { fixer: { model: 'a/m', thinking: 'low' } },
-      c: { extends: 'b', oracle: { model: 'o/m' } },
+      c: { extends: 'b', senior: { model: 'o/m' } },
     },
   });
   const list = listPresets(opium);
@@ -150,7 +181,7 @@ test('listPresets reports parent, active and inherited summary', () => {
   const c = list.presets.find((p) => p.name === 'c');
   assert.equal(c?.parent, 'b');
   assert.equal(c?.active, true);
-  assert.deepEqual(c?.agents, { fixer: 'a/m (low)', oracle: 'o/m' });
+  assert.deepEqual(c?.agents, { fixer: 'a/m (low)', senior: 'o/m' });
 });
 
 type Handler = (args: string, ctx: unknown) => Promise<void> | void;

@@ -2,7 +2,7 @@
 //   { "preset": "cheap",
 //     "presets": {
 //       "base": { "fixer": { "model": "a/b" } },
-//       "cheap": { "extends": "base", "oracle": { "thinking": "low" } } } }
+//       "cheap": { "extends": "base", "senior": { "thinking": "low" } } } }
 // The active preset sits between the built-in fallbacks and opium.json
 // `agents` (same order as oh-my-opencode-slim). Switching only
 // rewrites the `preset` key; runs read overrides when they start.
@@ -10,6 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
+  migrateLegacyOverrides,
   parseOverride,
   readAgentOverrides,
   type AgentOverride,
@@ -99,7 +100,10 @@ export const resolvePreset = (
       }
       own[agent] = parseOverride(path, `${link}.${agent}`, value, errors);
     }
-    mergeInto(overrides, own);
+    mergeInto(
+      overrides,
+      migrateLegacyOverrides(path, `preset "${link}": `, own, errors),
+    );
   }
   return { overrides, errors };
 };

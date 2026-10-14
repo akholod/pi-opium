@@ -59,6 +59,46 @@ export interface AgentOverride {
 
 export type AgentOverrides = Record<string, AgentOverride>;
 
+// Former agent names, still accepted by the agent tools, saved run records
+// and opium.json keys; they resolve to the current name and are never
+// advertised.
+export const LEGACY_AGENT_NAMES: Readonly<Record<string, string>> = {
+  explorer: 'scout',
+  librarian: 'researcher',
+  oracle: 'senior',
+  observer: 'vision',
+};
+
+export const resolveAgentName = (name: string): string =>
+  Object.hasOwn(LEGACY_AGENT_NAMES, name)
+    ? (LEGACY_AGENT_NAMES[name] ?? name)
+    : name;
+
+// Moves overrides keyed by a legacy agent name onto the current name (the
+// current key wins per field) and reports each renamed key once.
+export const migrateLegacyOverrides = (
+  path: string,
+  scope: string,
+  overrides: AgentOverrides,
+  errors: string[],
+): AgentOverrides => {
+  const out: AgentOverrides = {};
+  const legacy: [string, string, AgentOverride][] = [];
+  for (const [name, override] of Object.entries(overrides)) {
+    const current = resolveAgentName(name);
+    if (current === name) out[name] = { ...out[name], ...override };
+    else legacy.push([name, current, override]);
+  }
+  for (const [name, current, override] of legacy) {
+    errors.push(
+      `${path}: ${scope}agent "${name}" was renamed to "${current}"; ` +
+        'rename the key',
+    );
+    out[current] = { ...override, ...out[current] };
+  }
+  return out;
+};
+
 export interface LoadAgentOptions {
   dirs?: readonly string[];
   overrides?: AgentOverrides;
@@ -491,11 +531,13 @@ export const readAgentOverrides = (opiumPath: string): ReadOverrides => {
   const fromOpium = opium?.agents;
   if (fromOpium !== undefined) {
     if (isRecord(fromOpium)) {
+      const own: AgentOverrides = {};
       for (const [agent, value] of Object.entries(fromOpium)) {
-        overrides[agent] = {
-          ...overrides[agent],
-          ...parseOverride(opiumPath, agent, value, errors),
-        };
+        own[agent] = parseOverride(opiumPath, agent, value, errors);
+      }
+      const current = migrateLegacyOverrides(opiumPath, '', own, errors);
+      for (const [agent, value] of Object.entries(current)) {
+        overrides[agent] = { ...overrides[agent], ...value };
       }
     } else {
       errors.push(`${opiumPath}: agents must be an object`);

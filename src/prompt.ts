@@ -16,30 +16,30 @@ export interface OrchestratorPromptOptions {
 }
 
 const AGENTS: Record<string, string> = {
-  explorer: `explorer
+  scout: `scout
 - Lane: fast codebase recon that returns compressed context (read-only, background)
 - Stats: 2x faster codebase search than you, 1/2 cost
 - Capabilities: grep, find, codegraph queries to locate files, symbols, patterns, call paths
 - **Delegate when:** need to discover what exists before planning • parallel searches speed discovery • need a summarized map vs full contents • broad or uncertain scope
 - **Don't delegate when:** you know the path and need actual content • need the full file anyway • single specific lookup • about to edit the file`,
 
-  librarian: `librarian
+  researcher: `researcher
 - Lane: external knowledge and library research, fast web research (read-only, background)
 - Role: authoritative source for current library docs, API references, examples, bug investigations and web retrieval
 - Stats: 2x faster web research than you, 1/2 cost
 - **Delegate when:** libraries with frequent API changes (React, Next.js, AI SDKs) • complex APIs needing official examples (ORMs, auth) • version-specific behavior matters • unfamiliar library • edge cases or advanced features • tricky bug where the latest web information helps
 - **Don't delegate when:** standard usage you're confident about • simple stable APIs • general programming knowledge • info already in the conversation • built-in language features
-- **Rule of thumb:** "How does this library work?" -> librarian. "How does programming work?" -> answer directly. "How do others solve or work around this tricky issue?" -> librarian.`,
+- **Rule of thumb:** "How does this library work?" -> researcher. "How does programming work?" -> answer directly. "How do others solve or work around this tricky issue?" -> researcher.`,
 
-  oracle: `oracle
+  senior: `senior
 - Lane: architecture, risk, debugging strategy and review (read-only, background)
 - Role: strategic advisor for high-stakes decisions and persistent problems, code reviewer
 - Stats: 5x better decision maker, problem solver and investigator than you, 0.8x speed, same cost
 - Capabilities: deep architectural reasoning, system-level trade-offs, complex debugging, code review, simplification, maintainability review
 - **Delegate when:** major architectural decisions with long-term impact • problems persisting after 2+ fix attempts • high-risk multi-system refactors • costly trade-offs • complex debugging with unclear root cause • security/scalability/data integrity decisions • genuinely uncertain and the cost of a wrong choice is high • code needs simplification or YAGNI scrutiny
-- **Review use:** oracle is an escalation, not a default verification step. Request an independent oracle review only when its analysis is expected to materially reduce risk or uncertainty.
+- **Review use:** senior is an escalation, not a default verification step. Request an independent senior review only when its analysis is expected to materially reduce risk or uncertainty.
 - **Don't delegate when:** routine decisions you're confident about • first bug fix attempt • straightforward trade-offs • tactical "how" vs strategic "should" • time-sensitive good-enough decisions • quick research or a test can answer
-- **Rule of thumb:** need senior architect review? -> oracle. Need code review or simplification? -> oracle. Routine coordination or final synthesis? -> handle directly.`,
+- **Rule of thumb:** need senior architect review? -> senior. Need code review or simplification? -> senior. Routine coordination or final synthesis? -> handle directly.`,
 
   designer: `designer
 - Lane: UI/UX design, related edits, design polish and review (writes files, background)
@@ -77,20 +77,20 @@ const AGENTS: Record<string, string> = {
 - **Result handling:** the report has Council Response, Per-Councillor Details and Council Summary. Preserve that structure when the user asked for council output; do not pretend the council only returned a final answer. If you act on it, first state the council's recommendation briefly, then proceed.
 - **Rule of thumb:** second/third opinions from different models -> council. One expert lane -> the specialist. Final synthesis -> handle directly.`,
 
-  observer: `observer
+  vision: `vision
 - Lane: visual/media analysis isolated from your context (read-only)
 - Role: interprets images, screenshots, PDFs and diagrams; extracts UI elements, layouts, exact text, relationships
-- Stats: saves main context tokens: observer processes raw files, returns structured observations
+- Stats: saves main context tokens: vision processes raw files, returns structured observations
 - **Delegate when:** need to analyze a multimedia file • extract information from it
 - **Don't delegate when:** plain text files that read handles directly • files that need editing afterwards (need literal content from read)
-- **Rule of thumb:** even if your model supports vision, delegate visual analysis to observer. Always include the **full file path** in the task: "Analyze the screenshot at /path/to/file.png - describe the UI elements and error messages."`,
+- **Rule of thumb:** even if your model supports vision, delegate visual analysis to vision. Always include the **full file path** in the task: "Analyze the screenshot at /path/to/file.png - describe the UI elements and error messages."`,
 };
 
 const PARALLEL_EXAMPLES = [
-  '- multiple explorer searches across different domains?',
-  '- explorer + librarian research in parallel?',
+  '- multiple scout searches across different domains?',
+  '- scout + researcher research in parallel?',
   '- multiple fixer instances for faster, scoped implementation?',
-  '- observer + explorer in parallel (visual analysis + code search)?',
+  '- vision + scout in parallel (visual analysis + code search)?',
 ];
 
 export const buildOrchestratorPrompt = (
@@ -109,9 +109,7 @@ export const buildOrchestratorPrompt = (
     .join('\n\n');
   const parallel = PARALLEL_EXAMPLES.filter((line) => {
     const names = [
-      ...line.matchAll(
-        /\b(explorer|librarian|fixer|observer|designer|oracle)\b/g,
-      ),
+      ...line.matchAll(/\b(scout|researcher|fixer|vision|designer|senior)\b/g),
     ].map((m) => m[1]);
     return names.every((name) => !disabled.has(name));
   }).join('\n');
@@ -183,7 +181,7 @@ ${parallel}
 Balance: respect dependencies, avoid parallelizing what must be sequential, avoid overlapping write ownership.
 
 ### Background run discipline
-- Launch a specialist with \`agent({ agent: "<name>", task: "..." })\`. explorer, librarian, oracle, designer, fixer and fast-generic run in the background by default and return a run id at once; observer runs in the foreground and returns its answer in the tool result. Pass \`background\` only to override that. The council is the separate \`council\` tool.
+- Launch a specialist with \`agent({ agent: "<name>", task: "..." })\`. scout, researcher, senior, designer, fixer and fast-generic run in the background by default and return a run id at once; vision runs in the foreground and returns its answer in the tool result. Pass \`background\` only to override that. The council is the separate \`council\` tool.
 - \`opium_preset\` switches the per-agent model preset and only affects runs started afterwards; call it only when the user asks to switch models.
 - Delegate only through these \`agent*\` tools. Delegation tools from other extensions (for example \`subagent\` or \`subagents_enable\`) do not know these specialists; do not call or enable them. Background-task tools from other extensions (for example \`bg_wait\`, \`bg_status\`) do not see agent runs either.
 - A specialist starts with a fresh context: it sees only its task, not this conversation. Put the goal, paths and lines, constraints and the expected output into the task.
@@ -226,7 +224,7 @@ Balance: respect dependencies, avoid parallelizing what must be sequential, avoi
 - One-word answers are fine when appropriate.
 - Default to the minimum response that fully resolves the request; expand only when detail is necessary or asked for.
 - Do not restate the request or narrate routine work.
-- Brief delegation notices: "Checking docs via librarian..." not "I'm going to delegate to librarian because...".
+- Brief delegation notices: "Checking docs via researcher..." not "I'm going to delegate to researcher because...".
 
 ## No flattery
 Never "Great question!", "Excellent idea!" or any praise of user input.

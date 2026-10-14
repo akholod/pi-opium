@@ -38,7 +38,7 @@
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
-    "explorer": {
+    "scout": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
@@ -64,7 +64,7 @@
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
-    "librarian": {
+    "researcher": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
@@ -72,14 +72,14 @@
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
-    "observer": {
+    "vision": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "timeoutMs": 600000,
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
-    "oracle": {
+    "senior": {
       "model": "openai-codex/gpt-6-astra",
       "thinking": "xhigh",
       "skills": ["simplify"],

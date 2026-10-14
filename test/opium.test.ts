@@ -14,7 +14,11 @@ import type {
   RunAgentResult,
 } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
-import { loadAgent, readAgentOverrides } from '../src/agents.ts';
+import {
+  LEGACY_AGENT_NAMES,
+  loadAgent,
+  readAgentOverrides,
+} from '../src/agents.ts';
 import { runCouncil } from '../src/council.ts';
 import {
   readState,
@@ -41,14 +45,14 @@ const agentBody = (name: string): string =>
 test('orchestrator prompt lists the roster and drops disabled agents', () => {
   const full = buildOrchestratorPrompt();
   for (const name of [
-    'explorer',
-    'librarian',
-    'oracle',
+    'scout',
+    'researcher',
+    'senior',
     'designer',
     'fixer',
     'fast-generic',
     'council',
-    'observer',
+    'vision',
   ]) {
     assert.ok(full.includes(`\n${name}`), name);
   }
@@ -74,18 +78,28 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
   assert.ok(!full.includes('ralplan'));
   assert.ok(!full.includes('ralph'));
   const trimmed = buildOrchestratorPrompt({
-    disabled: ['designer', 'observer'],
+    disabled: ['designer', 'vision'],
   });
   assert.ok(!trimmed.includes('\ndesigner\n'));
-  assert.ok(!trimmed.includes('observer + explorer'));
+  assert.ok(!trimmed.includes('vision + scout'));
   assert.ok(trimmed.includes('multiple fixer instances'));
   // only callable agents are listed; council is a tool and always stays
   const available = buildOrchestratorPrompt({
-    available: ['explorer', 'fixer'],
+    available: ['scout', 'fixer'],
   });
-  assert.ok(available.includes('\nexplorer\n'));
-  assert.ok(!available.includes('\noracle\n'));
+  assert.ok(available.includes('\nscout\n'));
+  assert.ok(!available.includes('\nsenior\n'));
   assert.ok(available.includes('\ncouncil (via'));
+});
+
+test('orchestrator prompt names the current agents, not the former ones', () => {
+  const full = buildOrchestratorPrompt();
+  for (const name of ['scout', 'researcher', 'senior', 'vision']) {
+    assert.match(full, new RegExp(`\\b${name}\\b`), name);
+  }
+  for (const name of Object.keys(LEGACY_AGENT_NAMES)) {
+    assert.doesNotMatch(full, new RegExp(`\\b${name}\\b`, 'i'), name);
+  }
 });
 
 test('state round-trips and defaults to on', () => {
@@ -101,13 +115,13 @@ test('writeState preserves other keys in the file', () => {
     path,
     JSON.stringify({
       orchestrator: true,
-      agents: { oracle: { model: 'a/b' } },
+      agents: { senior: { model: 'a/b' } },
     }),
   );
   writeState(path, { orchestrator: false });
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
     orchestrator: false,
-    agents: { oracle: { model: 'a/b' } },
+    agents: { senior: { model: 'a/b' } },
   });
 });
 

@@ -4,7 +4,7 @@ Behavior-preserving code simplification and readability-focused refactoring.
 
 ## Overview
 
-This bundled skill helps the `oracle` agent review and simplify code without
+This bundled skill helps the `senior` agent review and simplify code without
 changing behavior. It focuses on readability, maintainability, and reducing
 unnecessary complexity.
 

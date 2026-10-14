@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -90,12 +90,18 @@ interface Harness {
   deps: ToolDeps;
   handles: FakeHandle[];
   starts: StartOptions[];
+  dir: string;
 }
 
 const setup = (
-  opts: { manual?: boolean; status?: RunStatus; max?: number } = {},
+  opts: {
+    manual?: boolean;
+    status?: RunStatus;
+    max?: number;
+    dir?: string;
+  } = {},
 ): Harness => {
-  const dir = mkdtempSync(join(tmpdir(), 'opium-tools-'));
+  const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'opium-tools-'));
   const handles: FakeHandle[] = [];
   const starts: StartOptions[] = [];
   let clock = 0;
@@ -119,11 +125,11 @@ const setup = (
   const deps: ToolDeps = {
     registry,
     loadDef: (name) => def(name, name === 'bgagent'),
-    agentNames: () => ['bgagent', 'fixer', 'oracle'],
+    agentNames: () => ['bgagent', 'fixer', 'senior'],
     cwd: '/w',
     now: () => clock,
   };
-  return { deps, handles, starts };
+  return { deps, handles, starts, dir };
 };
 
 const tick = (): Promise<void> =>
@@ -136,9 +142,47 @@ test('unknown and non-advertised agents are rejected with the roster', async () 
   for (const name of ['nope', 'council']) {
     await assert.rejects(
       runAgent(deps, { agent: name, task: 't' }),
-      new RegExp(`unknown agent "${name}"; available: bgagent, fixer, oracle`),
+      new RegExp(`unknown agent "${name}"; available: bgagent, fixer, senior`),
     );
   }
+});
+
+test('a legacy agent name runs the renamed agent', async () => {
+  const { deps } = setup();
+  const res = await runAgent(
+    { ...deps, agentNames: () => ['scout', 'senior'] },
+    { agent: 'explorer', task: 't' },
+  );
+  assert.match(res.text, /^run r-1 \(scout\) completed/);
+  assert.equal(deps.registry.get('r-1')?.agent, 'scout');
+  const second = await runAgent(deps, { agent: 'oracle', task: 'u' });
+  assert.match(second.text, /^run r-2 \(senior\) completed/);
+  // legacy names are not advertised: the roster error lists current names
+  await assert.rejects(
+    runAgent(deps, { agent: 'librarian', task: 't' }),
+    /unknown agent "researcher"; available: bgagent, fixer, senior/,
+  );
+});
+
+test('agent_revive of a restored record saved under a legacy name', async () => {
+  const first = setup();
+  await runAgent(first.deps, { agent: 'senior', task: 'one' });
+  const metaFile = join(first.dir, 'r-1.json');
+  const meta = JSON.parse(readFileSync(metaFile, 'utf8')) as { agent: string };
+  meta.agent = 'oracle';
+  writeFileSync(metaFile, JSON.stringify(meta));
+
+  const { deps } = setup({ dir: first.dir });
+  assert.equal(deps.registry.agentOf('r-1'), 'senior');
+  const res = await reviveAgent(deps, { id: 'r-1', task: 'again' });
+  assert.match(res.text, /^run r-1 \(senior\) completed, generation 2/);
+  // the old name given explicitly still matches the owner
+  const named = await reviveAgent(deps, {
+    id: 'r-1',
+    task: 'more',
+    agent: 'oracle',
+  });
+  assert.match(named.text, /generation 3/);
 });
 
 test('foreground completed returns formatted text and marks read', async () => {
@@ -258,7 +302,7 @@ test('agent_revive continues a run; unknown id; owner check', async () => {
     /unknown run "r-9"/,
   );
   await assert.rejects(
-    reviveAgent(deps, { id: 'r-1', task: 'x', agent: 'oracle' }),
+    reviveAgent(deps, { id: 'r-1', task: 'x', agent: 'senior' }),
     /belongs to agent "fixer"/,
   );
 });
@@ -267,7 +311,7 @@ test('agent_status reports one run and lists all newest first', async () => {
   const { deps } = setup({ manual: true });
   const long = 'x'.repeat(300);
   await runAgent(deps, { agent: 'fixer', task: long, background: true });
-  await runAgent(deps, { agent: 'oracle', task: 'short', background: true });
+  await runAgent(deps, { agent: 'senior', task: 'short', background: true });
   const one = agentStatus(deps, { id: 'r-1' }).text;
   assert.match(one, /^run r-1 \(fixer\) running, generation 1/);
   assert.match(one, /background: true, unread: false, retained: true/);
@@ -275,7 +319,7 @@ test('agent_status reports one run and lists all newest first', async () => {
   assert.match(one, /warnings: w1/);
   const list = agentStatus(deps, {}).text.split('\n');
   assert.equal(list.length, 2);
-  assert.match(list[0]!, /^r-2 oracle running gen 1 \[background, retained\]/);
+  assert.match(list[0]!, /^r-2 senior running gen 1 \[background, retained\]/);
   assert.match(list[1]!, /^r-1 fixer/);
   assert.throws(() => agentStatus(deps, { id: 'nope' }), /unknown run/);
   assert.equal(agentStatus(setup().deps, {}).text, 'no runs');

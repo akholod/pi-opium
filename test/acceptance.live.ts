@@ -143,21 +143,21 @@ if (want('duplicate')) {
   log('== C. duplicate spawn refused until the result is read');
   const task = 'Without tools: reply with the word PONG only.';
   const first = await runAgent(deps, {
-    agent: 'explorer',
+    agent: 'scout',
     task,
     background: true,
   });
   const id = idOf(first.text);
   await until(id);
   try {
-    await runAgent(deps, { agent: 'explorer', task, background: true });
+    await runAgent(deps, { agent: 'scout', task, background: true });
     log('NOT refused (bad)');
   } catch (error) {
     log('refused:', failure(error));
   }
   log('result:', short((await agentResult(deps, { id })).text, 120));
   const again = await runAgent(deps, {
-    agent: 'explorer',
+    agent: 'scout',
     task,
     background: true,
   });
@@ -171,7 +171,7 @@ if (want('tools')) {
     'List the exact names of every tool you can call, comma-separated, ' +
     'nothing else. Then on a new line answer YES or NO: does your system ' +
     'prompt contain the phrase "workflow manager for coding work"?';
-  for (const agent of ['explorer', 'librarian', 'designer']) {
+  for (const agent of ['scout', 'researcher', 'designer']) {
     try {
       const answer = await runAgent(deps, {
         agent,

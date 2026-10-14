@@ -1,14 +1,14 @@
 # pi-opium
 
 Daily-work orchestration for pi, ported from oh-my-opencode-slim: an
-orchestrator prompt for the main session, specialist agents (explorer,
-librarian, oracle, designer, fixer, fast-generic, observer) and a
+orchestrator prompt for the main session, specialist agents (scout,
+researcher, senior, designer, fixer, fast-generic, vision) and a
 multi-model council. Agents run in-process through
 [pi-agent-runner](https://github.com/akholod/pi-agent-runner); no other
 subagent extension is needed.
 
 For the full roster install `pi-mcp-adapter` with a `codegraph` server
-(explorer, fixer, oracle) and `pi-web-access` (librarian).
+(scout, fixer, senior) and `pi-web-access` (researcher).
 
 ## Install
 
@@ -61,10 +61,10 @@ existing file is never touched or merged with the defaults. Example:
   "preset": "cheap",
   "presets": {
     "base": { "fixer": { "model": "openai-codex/gpt-6-sol" } },
-    "cheap": { "extends": "base", "oracle": { "thinking": "low" } }
+    "cheap": { "extends": "base", "senior": { "thinking": "low" } }
   },
   "agents": {
-    "oracle": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
+    "senior": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
     "fixer": {
       "timeoutMs": 7200000,
       "idleTimeoutMs": 600000,

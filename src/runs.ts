@@ -16,7 +16,7 @@ import {
   type RunStatus,
   type TurnOptions,
 } from 'pi-agent-runner';
-import type { AgentDefinition } from './agents.ts';
+import { resolveAgentName, type AgentDefinition } from './agents.ts';
 import { buildLaunch, discoverSkills, skillResolver } from './launch.ts';
 
 export type RunState = 'starting' | 'running' | RunStatus;
@@ -207,7 +207,7 @@ export class RunRegistry {
     try {
       const meta: unknown = JSON.parse(readFileSync(this.metaPath(id), 'utf8'));
       const value = (meta as { agent?: unknown } | null)?.agent;
-      if (typeof value === 'string' && value) agent = value;
+      if (typeof value === 'string' && value) agent = resolveAgentName(value);
     } catch {
       // unknown run
     }
@@ -361,7 +361,7 @@ export class RunRegistry {
     const generation = Number(meta.generation);
     const run: RunRecord = {
       id,
-      agent: str('agent'),
+      agent: resolveAgentName(str('agent')),
       objective: str('objective'),
       task: str('task'),
       state: 'failed',

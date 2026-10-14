@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  LEGACY_AGENT_NAMES,
   loadAgent,
   loadAgents,
   parseOverride,
@@ -38,16 +39,16 @@ test('every repo agent file loads', () => {
     return agent;
   };
   assert.equal(agents.size, 11);
-  const explorer = get('explorer');
-  assert.deepEqual(explorer.mcpServers, ['codegraph']);
-  assert.deepEqual(explorer.packages, ['pi-mcp-adapter']);
-  assert.deepEqual(explorer.tools, ['read', 'grep', 'find', 'ls']);
-  assert.deepEqual(get('librarian').packages, ['pi-web-access']);
+  const scout = get('scout');
+  assert.deepEqual(scout.mcpServers, ['codegraph']);
+  assert.deepEqual(scout.packages, ['pi-mcp-adapter']);
+  assert.deepEqual(scout.tools, ['read', 'grep', 'find', 'ls']);
+  assert.deepEqual(get('researcher').packages, ['pi-web-access']);
   assert.deepEqual(get('council').tools, []);
   const designer = get('designer');
   assert.equal(designer.tools, undefined);
   assert.equal(designer.contextFiles, true);
-  assert.equal(get('observer').contextFiles, false);
+  assert.equal(get('vision').contextFiles, false);
 });
 
 test('an agent with no opium.json entry gets the built-in fallbacks', () => {
@@ -87,19 +88,19 @@ test('defaults/opium.json parses and carries the original values', () => {
     assert.ok(agent, name);
     return agent;
   };
-  assert.equal(get('explorer').model, 'openai-codex/gpt-6-luna');
-  assert.equal(get('explorer').thinking, 'low');
-  assert.equal(get('explorer').background, true);
-  assert.equal(get('explorer').timeoutMs, 600000);
+  assert.equal(get('scout').model, 'openai-codex/gpt-6-luna');
+  assert.equal(get('scout').thinking, 'low');
+  assert.equal(get('scout').background, true);
+  assert.equal(get('scout').timeoutMs, 600000);
   assert.equal(get('fast-generic').gitGuard, false);
   assert.equal(get('fixer').gitGuard, true);
   assert.deepEqual(get('fixer').skills, ['pnpm']);
   assert.deepEqual(get('designer').skills, ['make-interfaces-feel-better']);
   assert.equal(get('designer').timeoutMs, 7200000);
   assert.equal(get('fixer').timeoutMs, 7200000);
-  assert.deepEqual(get('oracle').skills, ['simplify']);
-  assert.equal(get('oracle').thinking, 'xhigh');
-  assert.equal(get('observer').background, false);
+  assert.deepEqual(get('senior').skills, ['simplify']);
+  assert.equal(get('senior').thinking, 'xhigh');
+  assert.equal(get('vision').background, false);
   assert.equal(get('council').model, 'opencode-go/kimi-k3');
   assert.equal(get('councillor-alpha').model, 'openai-codex/gpt-6-luna');
   assert.equal(get('councillor-beta').model, 'opencode-go/deepseek-v4-pro');
@@ -339,6 +340,41 @@ test('readAgentOverrides reports invalid entries without throwing', () => {
   const broken = join(dir, 'broken.json');
   writeFileSync(broken, '{nope');
   assert.match(readAgentOverrides(broken).errors[0], /invalid JSON/);
+});
+
+test('legacy agent names map to the current ones', () => {
+  assert.deepEqual(LEGACY_AGENT_NAMES, {
+    explorer: 'scout',
+    librarian: 'researcher',
+    oracle: 'senior',
+    observer: 'vision',
+  });
+  for (const current of Object.values(LEGACY_AGENT_NAMES)) {
+    assert.ok(existsSync(join(agentsDir, `${current}.md`)), current);
+  }
+});
+
+test('opium.json agents.<legacy> applies to the new agent with a warning; the new key wins', () => {
+  const opium = join(tmp(), 'opium.json');
+  writeFileSync(
+    opium,
+    JSON.stringify({
+      agents: {
+        explorer: { model: 'o/old', thinking: 'low', timeoutMs: 5 },
+        oracle: { thinking: 'high' },
+        scout: { model: 'o/new', thinking: 'medium' },
+      },
+    }),
+  );
+  const { overrides, errors } = readAgentOverrides(opium);
+  assert.deepEqual(errors, [
+    `${opium}: agent "explorer" was renamed to "scout"; rename the key`,
+    `${opium}: agent "oracle" was renamed to "senior"; rename the key`,
+  ]);
+  assert.deepEqual(overrides, {
+    scout: { model: 'o/new', thinking: 'medium', timeoutMs: 5 },
+    senior: { thinking: 'high' },
+  });
 });
 
 // ---- MCP tool resolution ----

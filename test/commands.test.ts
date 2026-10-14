@@ -107,5 +107,5 @@ test('deepwork SKILL.md has valid frontmatter and no slim leftovers', () => {
   assert.match(fm[1], /^name: deepwork$/m);
   assert.match(fm[1], /^description: .+/m);
   assert.ok(!raw.includes('.slim/'));
-  assert.ok(!/@(oracle|explorer|council|fixer|designer|librarian)/.test(raw));
+  assert.ok(!/@(senior|scout|council|fixer|designer|researcher)/.test(raw));
 });

@@ -12,6 +12,7 @@ import {
 import {
   loadAgent,
   loadAgents,
+  resolveAgentName,
   readAgentOverrides,
   type AgentDefinition,
 } from './agents.ts';
@@ -108,7 +109,8 @@ export const formatRun = (run: RunRecord): string => {
   return lines.join('\n');
 };
 
-const callable = (deps: ToolDeps, name: string): AgentDefinition => {
+const callable = (deps: ToolDeps, requested: string): AgentDefinition => {
+  const name = resolveAgentName(requested);
   const names = deps.agentNames();
   if (!names.includes(name)) {
     throw new Error(
@@ -186,7 +188,7 @@ const reviveRun = async (
   const owner = deps.registry.agentOf(id);
   const name = owner ?? agent;
   if (!name) throw new Error(`unknown run "${id}"`);
-  if (owner && agent && agent !== owner) {
+  if (owner && agent && resolveAgentName(agent) !== resolveAgentName(owner)) {
     throw new Error(`run ${id} belongs to agent "${owner}", not "${agent}"`);
   }
   const def = callable(deps, name);

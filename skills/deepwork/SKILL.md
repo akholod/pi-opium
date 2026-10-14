@@ -15,8 +15,8 @@ docs changes, simple bug fixes, or routine bounded features.
 
 When deepwork is active, the orchestrator must manage the work as a scheduler,
 not as the default implementation worker. Delegate with
-`agent({ agent: "<name>" })` (explorer, librarian, oracle, designer, fixer,
-fast-generic, observer) and `council`; track lanes with `agent_status`,
+`agent({ agent: "<name>" })` (scout, researcher, senior, designer, fixer,
+fast-generic, vision) and `council`; track lanes with `agent_status`,
 `agent_result`, `agent_message`, `agent_cancel`, and `agent_revive`.
 
 ## Setup and Deepwork State
@@ -63,7 +63,7 @@ Full delegated output lands verbatim in
 `<task-slug>/<topic>.md` — written by the lane itself when it can write,
 transcribed by the orchestrator when it cannot; the progress file gets
 only a one-line conclusion plus the path. Never paste
-`council`/`oracle`/`librarian` output into a progress file or fork
+`council`/`senior`/`researcher` output into a progress file or fork
 one. The artifact's first line is the lane's one-line conclusion, the
 same line it returns; accept lane completion only after re-reading the
 artifact from disk and finding that first line (on miss, re-check once).
@@ -85,8 +85,8 @@ one, do not read other task directories.
 
 - before dispatch, draft a phased implementation/delegation plan: a small number
   of coherent phases from the work's dependencies and natural delivery
-  boundaries; do not split work merely to reduce an oracle review's scope;
-- make an `oracle` review mandatory after each phase; record the phase order,
+  boundaries; do not split work merely to reduce a senior review's scope;
+- make a `senior` review mandatory after each phase; record the phase order,
   specialist ownership, gate order, and one-line gate rationale in the deepwork
   file; share a compact version with the user;
 
@@ -111,34 +111,34 @@ Use the scheduler model throughout:
 ## Phase Gate and Commit
 
 - after each planned phase, run relevant validation, update the task progress file,
-  then request its planned `oracle` gate before continuing;
-- before its planned oracle gate, record in the task progress file the phase goal,
+  then request its planned `senior` gate before continuing;
+- before its planned senior gate, record in the task progress file the phase goal,
   changed paths, validation evidence, the specific decision or risk to review,
-  and accepted research with file references, so oracle reviews established
+  and accepted research with file references, so senior reviews established
   context rather than repeating discovery;
 - when the phase changes module boundaries, dependency direction, or file
-  placement, run an `explorer` structure scan in parallel with the oracle gate;
+  placement, run an `scout` structure scan in parallel with the senior gate;
 - reconcile review findings, perform one bounded remediation pass for material
   issues, including simplify/readability feedback, and validate that pass with
   focused evidence;
 - create a focused commit when the phase is an independently valid delivery
   boundary before starting the next phase;
 
-### Oracle Re-Reviews
+### Senior Re-Reviews
 
-Every planned oracle gate has one initial review and may have at most two
+Every planned senior gate has one initial review and may have at most two
 re-reviews. Request a re-review only when the remediation materially changes
 the reviewed decision or risk, or when the original concern cannot be verified
 with focused evidence. Do not spend a re-review on a mechanical or
 already-verified change.
 
-State the attempt in every oracle prompt, for example:
+State the attempt in every senior prompt, for example:
 
 ```text
 Gate 2 — review attempt 2 of 3 (1 re-review remaining)
 ```
 
-For re-reviews, tell oracle to prioritize unresolved material findings, risks
+For re-reviews, tell senior to prioritize unresolved material findings, risks
 introduced by remediation, and whether prior findings are resolved. It must not
 reopen accepted, unchanged, or resolved concerns. When the two re-reviews are
 exhausted, record any remaining material risk or blocker in the task progress file
