@@ -4,67 +4,89 @@
     "council": {
       "model": "opencode-go/kimi-k3",
       "thinking": "high",
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "councillor-alpha": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "high",
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "councillor-beta": {
       "model": "opencode-go/deepseek-v4-pro",
       "thinking": "high",
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "councillor-gamma": {
       "model": "opencode-go/glm-5.3",
       "thinking": "high",
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "designer": {
       "model": "opencode-go/kimi-k2.7-code",
       "thinking": "medium",
       "skills": ["make-interfaces-feel-better"],
       "background": true,
-      "timeoutMs": 1800000
+      "timeoutMs": 7200000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "explorer": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
-      "timeoutMs": 600000
+      "timeoutMs": 600000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "fast-generic": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
       "gitGuard": false,
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "fixer": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "medium",
       "skills": ["pnpm"],
       "background": true,
-      "timeoutMs": 1800000
+      "timeoutMs": 7200000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "librarian": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
       "background": true,
-      "timeoutMs": 900000
+      "timeoutMs": 900000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "observer": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "low",
-      "timeoutMs": 600000
+      "timeoutMs": 600000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     },
     "oracle": {
       "model": "openai-codex/gpt-6-astra",
       "thinking": "xhigh",
       "skills": ["simplify"],
       "background": true,
-      "timeoutMs": 1200000
+      "timeoutMs": 1200000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000
     }
   }
 }

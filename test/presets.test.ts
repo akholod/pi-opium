@@ -69,13 +69,15 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
           model: 'p/m',
           thinking: 'high',
           timeoutMs: 5,
+          idleTimeoutMs: 6,
+          wrapUpMs: 7,
           gitGuard: false,
         },
         oracle: { skills: ['s1'], permissionAsks: 'deny' },
       },
     },
     agents: {
-      fixer: { model: 'a/m', timeoutMs: 9, background: true },
+      fixer: { model: 'a/m', timeoutMs: 9, wrapUpMs: 11, background: true },
       oracle: { skills: ['s2'] },
     },
   });
@@ -88,6 +90,8 @@ test('precedence: preset < agents, field-wise, including new fields', () => {
     model: 'a/m',
     thinking: 'high',
     timeoutMs: 9,
+    idleTimeoutMs: 6,
+    wrapUpMs: 11,
     gitGuard: false,
     background: true,
   });

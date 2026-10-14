@@ -266,6 +266,8 @@ export const runCouncil = async (
       extensionFactories: sessionGuards,
       result: { kind: 'text' },
       timeoutMs: options.timeoutMs ?? agent.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      wrapUpMs: agent.wrapUpMs,
+      idleTimeoutMs: agent.idleTimeoutMs,
       signal: options.signal,
     });
   const chain = (

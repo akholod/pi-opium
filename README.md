@@ -65,7 +65,13 @@ existing file is never touched or merged with the defaults. Example:
   },
   "agents": {
     "oracle": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
-    "fixer": { "timeoutMs": 900000, "gitGuard": true, "skills": ["tdd"] },
+    "fixer": {
+      "timeoutMs": 7200000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000,
+      "gitGuard": true,
+      "skills": ["tdd"]
+    },
     "councillor-alpha": {
       "model": "openai-codex/gpt-6-sol",
       "fallbackModels": ["claude-bridge/claude-fable-5-1"]
@@ -100,12 +106,21 @@ thinking inherited, no timeouts, `background` false, `permissionAsks`
 | `model`          | `provider/id`                                             |
 | `fallbackModels` | list of `provider/id`                                     |
 | `thinking`       | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
-| `timeoutMs`      | positive number                                           |
+| `timeoutMs`      | positive number (ms), the hard cap on a generation        |
+| `idleTimeoutMs`  | positive number (ms), stop after this long with no events |
+| `wrapUpMs`       | positive number (ms), grace to answer after `timeoutMs`   |
 | `toolTimeoutMs`  | positive number                                           |
 | `background`     | `true` / `false`                                          |
 | `permissionAsks` | `forward` or `deny`                                       |
 | `gitGuard`       | `true` / `false`                                          |
 | `skills`         | list of skill names                                       |
+
+`timeoutMs` is the wall-clock cap of one generation. When it expires the agent
+is asked to give its final answer and is stopped only if none arrives within
+`wrapUpMs`; a wrapped-up answer is reported with a note, and a stopped run
+(`timed_out`) keeps its session, so `agent_revive` can get its report or
+continue. `idleTimeoutMs` stops an agent that produced no events for that long;
+it is paused while a tool runs or a person is asked.
 
 Precedence, per field, lowest to highest: the built-in fallbacks < the active
 preset < `agents`.

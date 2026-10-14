@@ -31,6 +31,8 @@ export interface AgentDefinition {
   packages: string[];
   skills: string[];
   timeoutMs?: number;
+  wrapUpMs?: number;
+  idleTimeoutMs?: number;
   toolTimeoutMs?: number;
   background: boolean;
   advertise: boolean;
@@ -46,6 +48,8 @@ export interface AgentOverride {
   thinking?: ThinkingLevel;
   fallbackModels?: string[];
   timeoutMs?: number;
+  wrapUpMs?: number;
+  idleTimeoutMs?: number;
   toolTimeoutMs?: number;
   background?: boolean;
   permissionAsks?: PermissionAsks;
@@ -98,6 +102,8 @@ const OPIUM_JSON_KEYS: Record<string, string> = {
   fallbackModels: 'fallbackModels',
   thinking: 'thinking',
   timeoutMs: 'timeoutMs',
+  wrapUpMs: 'wrapUpMs',
+  idleTimeoutMs: 'idleTimeoutMs',
   toolTimeoutMs: 'toolTimeoutMs',
   background: 'background',
   async: 'background',
@@ -292,6 +298,10 @@ const withOverride = (
     merged.fallbackModels = [...override.fallbackModels];
   }
   if (override.timeoutMs !== undefined) merged.timeoutMs = override.timeoutMs;
+  if (override.wrapUpMs !== undefined) merged.wrapUpMs = override.wrapUpMs;
+  if (override.idleTimeoutMs !== undefined) {
+    merged.idleTimeoutMs = override.idleTimeoutMs;
+  }
   if (override.toolTimeoutMs !== undefined) {
     merged.toolTimeoutMs = override.toolTimeoutMs;
   }
@@ -399,6 +409,8 @@ const OVERRIDE_KEYS = [
   'fallbackModels',
   'thinking',
   'timeoutMs',
+  'wrapUpMs',
+  'idleTimeoutMs',
   'toolTimeoutMs',
   'background',
   'permissionAsks',
@@ -433,7 +445,12 @@ export const parseOverride = (
         out.fallbackModels = parseList('fallbackModels', field).map((entry) =>
           parseModelId('fallbackModels entry', entry),
         );
-      } else if (key === 'timeoutMs' || key === 'toolTimeoutMs') {
+      } else if (
+        key === 'timeoutMs' ||
+        key === 'wrapUpMs' ||
+        key === 'idleTimeoutMs' ||
+        key === 'toolTimeoutMs'
+      ) {
         out[key] = parsePositive(key, field);
       } else if (key === 'background' || key === 'gitGuard') {
         out[key] = parseBoolean(key, field);

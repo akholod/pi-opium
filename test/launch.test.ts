@@ -77,6 +77,8 @@ test('contextFiles, model, thinking, limits', () => {
     fallbackModels: ['p/n'],
     thinking: 'high',
     timeoutMs: 5,
+    wrapUpMs: 3,
+    idleTimeoutMs: 4,
     toolTimeoutMs: 7,
     permissionAsks: 'deny',
     gitGuard: false,
@@ -87,7 +89,12 @@ test('contextFiles, model, thinking, limits', () => {
   assert.equal(start.thinking, 'high');
   assert.equal(start.permissionAsks, 'deny');
   assert.equal(start.gitGuard, false);
-  assert.deepEqual(turn, { timeoutMs: 5, toolTimeoutMs: 7 });
+  assert.deepEqual(turn, {
+    timeoutMs: 5,
+    wrapUpMs: 3,
+    idleTimeoutMs: 4,
+    toolTimeoutMs: 7,
+  });
 });
 
 test('skills are appended; a missing one warns', () => {

@@ -58,6 +58,8 @@ test('an agent with no opium.json entry gets the built-in fallbacks', () => {
     assert.deepEqual(agent.fallbackModels, [], agent.name);
     assert.equal(agent.thinking, undefined, agent.name);
     assert.equal(agent.timeoutMs, undefined, agent.name);
+    assert.equal(agent.wrapUpMs, undefined, agent.name);
+    assert.equal(agent.idleTimeoutMs, undefined, agent.name);
     assert.equal(agent.toolTimeoutMs, undefined, agent.name);
     assert.equal(agent.background, false, agent.name);
     assert.equal(agent.permissionAsks, 'forward', agent.name);
@@ -76,6 +78,8 @@ test('defaults/opium.json parses and carries the original values', () => {
     assert.ok(override.model, name);
     assert.ok(override.thinking, name);
     assert.ok(override.timeoutMs, name);
+    assert.equal(override.idleTimeoutMs, 600000, name);
+    assert.equal(override.wrapUpMs, 180000, name);
   }
   const { agents } = loadAgents({ dirs: [agentsDir], overrides });
   const get = (name: string): AgentDefinition => {
@@ -91,7 +95,8 @@ test('defaults/opium.json parses and carries the original values', () => {
   assert.equal(get('fixer').gitGuard, true);
   assert.deepEqual(get('fixer').skills, ['pnpm']);
   assert.deepEqual(get('designer').skills, ['make-interfaces-feel-better']);
-  assert.equal(get('designer').timeoutMs, 1800000);
+  assert.equal(get('designer').timeoutMs, 7200000);
+  assert.equal(get('fixer').timeoutMs, 7200000);
   assert.deepEqual(get('oracle').skills, ['simplify']);
   assert.equal(get('oracle').thinking, 'xhigh');
   assert.equal(get('observer').background, false);
@@ -215,6 +220,8 @@ test('every override field applies over the built-in fallbacks', () => {
     overrides: {
       x: {
         timeoutMs: 111,
+        wrapUpMs: 333,
+        idleTimeoutMs: 444,
         toolTimeoutMs: 222,
         background: true,
         permissionAsks: 'deny',
@@ -224,6 +231,8 @@ test('every override field applies over the built-in fallbacks', () => {
     },
   });
   assert.equal(agent.timeoutMs, 111);
+  assert.equal(agent.wrapUpMs, 333);
+  assert.equal(agent.idleTimeoutMs, 444);
   assert.equal(agent.toolTimeoutMs, 222);
   assert.equal(agent.background, true);
   assert.equal(agent.permissionAsks, 'deny');
@@ -241,6 +250,8 @@ test('parseOverride accepts the full field list', () => {
       fallbackModels: ['p/f'],
       thinking: 'high',
       timeoutMs: 5,
+      wrapUpMs: 8,
+      idleTimeoutMs: '9',
       toolTimeoutMs: '7',
       background: 'true',
       permissionAsks: 'deny',
@@ -255,6 +266,8 @@ test('parseOverride accepts the full field list', () => {
     fallbackModels: ['p/f'],
     thinking: 'high',
     timeoutMs: 5,
+    wrapUpMs: 8,
+    idleTimeoutMs: 9,
     toolTimeoutMs: 7,
     background: true,
     permissionAsks: 'deny',
@@ -269,6 +282,8 @@ test('parseOverride: an invalid value is an error and the field is ignored', () 
     fallbackModels: ['nope'],
     thinking: 'wild',
     timeoutMs: -1,
+    wrapUpMs: 0,
+    idleTimeoutMs: 'x',
     toolTimeoutMs: 'x',
     background: 'maybe',
     permissionAsks: 'ask',

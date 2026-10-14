@@ -66,6 +66,25 @@ const valueText = (value: unknown): string => {
   return JSON.stringify(value, null, 2);
 };
 
+// Extra lines for a terminal generation: a wrap-up answer, a kept session.
+const outcomeNotes = (run: RunRecord): string[] => {
+  const notes: string[] = [];
+  if (run.state === 'completed' && run.result?.wrappedUp) {
+    notes.push(
+      'note: stopped at the time limit; the answer is a wrap-up summary',
+    );
+  }
+  if (
+    run.state === 'timed_out' &&
+    (run.retained || run.result?.transcriptPath)
+  ) {
+    notes.push(
+      'session kept: agent_revive this run to get its report or continue',
+    );
+  }
+  return notes;
+};
+
 // Shared result format for terminal runs.
 export const formatRun = (run: RunRecord): string => {
   const lines = [header(run)];
@@ -78,6 +97,7 @@ export const formatRun = (run: RunRecord): string => {
     lines.push(`dropped messages: ${result.dropped.join(' | ')}`);
   }
   if (run.warnings.length) lines.push(`warnings: ${run.warnings.join('; ')}`);
+  lines.push(...outcomeNotes(run));
   if (result) {
     const { usage } = result;
     lines.push(
@@ -298,6 +318,7 @@ export const agentStatus = (
   const error = run.error ?? run.result?.error;
   if (error) lines.push(`error: ${error}`);
   if (run.warnings.length) lines.push(`warnings: ${run.warnings.join('; ')}`);
+  lines.push(...outcomeNotes(run));
   return out(lines.join('\n'), run);
 };
 

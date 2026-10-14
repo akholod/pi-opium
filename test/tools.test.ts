@@ -11,12 +11,13 @@ import type {
   TurnOptions,
 } from 'pi-agent-runner';
 import type { AgentDefinition } from '../src/agents.ts';
-import { RunRegistry, type StartOptions } from '../src/runs.ts';
+import { RunRegistry, type RunRecord, type StartOptions } from '../src/runs.ts';
 import {
   agentCancel,
   agentMessage,
   agentResult,
   agentStatus,
+  formatRun,
   reviveAgent,
   runAgent,
   type ToolDeps,
@@ -350,4 +351,63 @@ test('aborting a foreground call cancels the run', async () => {
   controller.abort();
   await assert.rejects(pending, /run r-1 \(fixer\) cancelled/);
   assert.equal(deps.registry.get('r-1')?.state, 'cancelled');
+});
+
+const record = (over: Partial<RunRecord>, result?: GenerationResult) =>
+  ({
+    id: 'r-9',
+    agent: 'fixer',
+    objective: 'o',
+    task: 'o',
+    state: 'completed',
+    generation: 1,
+    background: true,
+    unread: true,
+    warnings: [],
+    retained: false,
+    transcriptPath: '/t.jsonl',
+    startedAt: 1,
+    lastUsedAt: 1,
+    cwd: '/w',
+    ...(result && { result }),
+    ...over,
+  }) as RunRecord;
+
+const WRAPPED =
+  'note: stopped at the time limit; the answer is a wrap-up summary';
+const KEPT =
+  'session kept: agent_revive this run to get its report or continue';
+
+test('formatRun: a wrapped-up completed run gets the note', () => {
+  const run = record({}, { ...gen('completed'), wrappedUp: true });
+  const lines = formatRun(run).split('\n');
+  assert.ok(lines.includes(WRAPPED));
+  assert.ok(!lines.includes(KEPT));
+  assert.equal(lines.at(-1), 'tokens 15, $0.0123, 1.5s');
+  assert.ok(!formatRun(record({}, gen('completed'))).includes(WRAPPED));
+});
+
+test('formatRun: timed_out says the session is kept when retained or saved', () => {
+  const retained = record(
+    { state: 'timed_out', retained: true },
+    gen('timed_out'),
+  );
+  assert.ok(formatRun(retained).split('\n').includes(KEPT));
+  const saved = record(
+    { state: 'timed_out' },
+    { ...gen('timed_out'), transcriptPath: '/t.jsonl' },
+  );
+  assert.ok(formatRun(saved).split('\n').includes(KEPT));
+  const gone = record({ state: 'timed_out' }, gen('timed_out'));
+  assert.ok(!formatRun(gone).includes(KEPT));
+  const failed = record({ retained: true }, gen('failed'));
+  assert.ok(!formatRun(failed).includes(KEPT));
+});
+
+test('agent_status and agent_result show the timed_out note', async () => {
+  const { deps } = setup({ status: 'timed_out' });
+  await runAgent(deps, { agent: 'fixer', task: 'x', background: true });
+  await tick();
+  assert.ok(agentStatus(deps, { id: 'r-1' }).text.includes(KEPT));
+  assert.ok(agentResult(deps, { id: 'r-1' }).text.includes(KEPT));
 });

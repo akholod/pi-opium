@@ -32,7 +32,10 @@ export interface LaunchContext {
 
 export interface Launch {
   start: Omit<StartAgentOptions, 'transcriptPath' | 'resumeFrom' | 'signal'>;
-  turn: Pick<TurnOptions, 'timeoutMs' | 'toolTimeoutMs'>;
+  turn: Pick<
+    TurnOptions,
+    'timeoutMs' | 'wrapUpMs' | 'idleTimeoutMs' | 'toolTimeoutMs'
+  >;
   warnings: string[];
 }
 
@@ -130,6 +133,8 @@ export const buildLaunch = (
 
   const turn: Launch['turn'] = {};
   if (def.timeoutMs !== undefined) turn.timeoutMs = def.timeoutMs;
+  if (def.wrapUpMs !== undefined) turn.wrapUpMs = def.wrapUpMs;
+  if (def.idleTimeoutMs !== undefined) turn.idleTimeoutMs = def.idleTimeoutMs;
   if (def.toolTimeoutMs !== undefined) turn.toolTimeoutMs = def.toolTimeoutMs;
   return { start, turn, warnings };
 };

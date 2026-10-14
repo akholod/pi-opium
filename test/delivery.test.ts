@@ -92,6 +92,47 @@ test('background terminal run: one steered turn-triggering send, read', () => {
   assert.deepEqual(h.read, ['r-1']);
 });
 
+test('delivery text carries the wrap-up and kept-session notes', () => {
+  const usage = {
+    input: 1,
+    output: 1,
+    cacheRead: 0,
+    cacheWrite: 0,
+    cost: 0,
+    turns: 1,
+    toolCalls: 0,
+    durationMs: 1000,
+    waitedMs: 0,
+  };
+  const h = setup();
+  h.delivery.deliver(
+    record({
+      result: {
+        status: 'completed',
+        value: 'v',
+        dropped: [],
+        usage,
+        wrappedUp: true,
+      },
+    }),
+  );
+  h.delivery.deliver(
+    record({
+      id: 'r-2',
+      state: 'timed_out',
+      result: { status: 'timed_out', value: '', dropped: [], usage },
+    }),
+  );
+  assert.match(
+    h.sent[0]?.message.content ?? '',
+    /\nnote: stopped at the time limit; the answer is a wrap-up summary\n/,
+  );
+  assert.match(
+    h.sent[1]?.message.content ?? '',
+    /\nsession kept: agent_revive this run to get its report or continue\n/,
+  );
+});
+
 test('same generation twice delivers once', () => {
   const h = setup();
   h.delivery.deliver(record());

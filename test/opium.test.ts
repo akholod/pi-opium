@@ -315,6 +315,35 @@ test('council: explicit timeoutMs overrides the agent file', async () => {
   assert.ok(f.calls.every((c) => c.timeoutMs === 1234));
 });
 
+test('council: wrapUpMs and idleTimeoutMs reach every seat and the synthesizer', async () => {
+  const f = fake();
+  await runCouncil({
+    ...base,
+    question: 'q',
+    overrides: {
+      ...shipped.overrides,
+      'councillor-alpha': {
+        ...shipped.overrides['councillor-alpha'],
+        wrapUpMs: 11,
+        idleTimeoutMs: 22,
+      },
+      council: {
+        ...shipped.overrides.council,
+        wrapUpMs: 33,
+        idleTimeoutMs: 44,
+      },
+    },
+    runAgent: f.runAgent,
+  });
+  const by = (name: string) => f.calls.find((c) => c.agent === name);
+  assert.equal(by('councillor-alpha')?.wrapUpMs, 11);
+  assert.equal(by('councillor-alpha')?.idleTimeoutMs, 22);
+  assert.equal(by('council')?.wrapUpMs, 33);
+  assert.equal(by('council')?.idleTimeoutMs, 44);
+  assert.equal(by('councillor-beta')?.wrapUpMs, 180000);
+  assert.equal(by('councillor-beta')?.idleTimeoutMs, 600000);
+});
+
 test('council: an invalid agent file fails and names the file', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'opium-agents-'));
   for (const name of ['alpha', 'beta', 'gamma']) {
