@@ -1,6 +1,6 @@
 {
   "name": "pi-opium",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pi extension: oh-my-opencode-slim style orchestrator with its own background specialist agents and a multi-model council, on pi-agent-runner",
   "type": "module",
   "license": "MIT",
