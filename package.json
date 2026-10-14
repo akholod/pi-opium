@@ -1,6 +1,6 @@
 {
   "name": "pi-opium",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Turn your Pi session into a small team: an orchestrator with background specialist agents and a multi-model council",
   "keywords": [
     "pi-package",
