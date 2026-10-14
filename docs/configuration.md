@@ -128,3 +128,12 @@ Precedence, per field, lowest to highest: the built-in fallbacks < the active
 preset < `agents`.
 
 Run transcripts are kept in `~/.pi/agent/opium/runs/`.
+
+## Images and vision
+
+vision is only used where a model cannot see images. If your session model
+can, it reads images itself and vision is left out. If it cannot, images
+you attach are saved to `.pi/opium/images/<session>/` in the project
+(add it to `.gitignore`) and handed to vision. scout, researcher, senior
+and designer whose own model cannot see images get a `vision` tool that
+runs the vision agent for them, one level deep.

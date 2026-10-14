@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import {
   DefaultPackageManager,
+  type ExtensionFactory,
   SettingsManager,
   getAgentDir,
   loadSkills,
@@ -18,6 +19,11 @@ import type {
 import type { AgentDefinition } from './agents.ts';
 import { sessionGuards } from './guards.ts';
 import { resolveMcpTools } from './mcp.ts';
+import {
+  VISION_DISPATCH_LINE,
+  VISION_DISPATCH_ROLES,
+  VISION_TOOL,
+} from './vision.ts';
 
 export interface ResolvedSkill {
   path: string;
@@ -31,6 +37,14 @@ export interface LaunchContext {
   builtinMcpServers?: typeof builtinMcpServers;
   builtinMcpDisabled?: typeof builtinMcpDisabled;
   resolveSkill?: (name: string, cwd: string) => ResolvedSkill | undefined;
+  // Set when the vision agent is callable. The child gets a `vision` tool
+  // (and a line telling it to use it) only when it is one of
+  // VISION_DISPATCH_ROLES and its own model cannot see images; unknown
+  // counts as "cannot see".
+  vision?: {
+    childSeesImages: boolean | undefined;
+    tool: (child: string) => ExtensionFactory;
+  };
 }
 
 export interface Launch {
@@ -92,6 +106,12 @@ export const buildLaunch = (
   const listBuiltin = ctx.builtinMcpServers ?? builtinMcpServers;
   const isBuiltinDisabled = ctx.builtinMcpDisabled ?? builtinMcpDisabled;
 
+  const vision =
+    ctx.vision?.childSeesImages !== true &&
+    VISION_DISPATCH_ROLES.includes(def.name)
+      ? ctx.vision
+      : undefined;
+
   let systemPrompt = def.prompt;
   for (const name of def.skills) {
     const skill = resolveSkill(name, ctx.cwd);
@@ -139,6 +159,13 @@ export const buildLaunch = (
     }
   }
 
+  if (vision) {
+    systemPrompt += `\n\n${VISION_DISPATCH_LINE}`;
+    if (tools !== undefined && !tools.includes(VISION_TOOL)) {
+      tools.push(VISION_TOOL);
+    }
+  }
+
   const start: Launch['start'] = {
     parent: ctx.parent,
     cwd: ctx.cwd,
@@ -151,7 +178,9 @@ export const buildLaunch = (
     permissionAsks: def.permissionAsks,
     gitGuard: def.gitGuard,
     // path, loop and JSON error guards in every child, as in slim
-    extensionFactories: sessionGuards,
+    extensionFactories: vision
+      ? [...sessionGuards, vision.tool(def.name)]
+      : sessionGuards,
   };
   if (builtin.length) start.mcpServers = builtin;
   if (tools !== undefined) start.tools = tools;

@@ -18,6 +18,8 @@ import {
 } from 'pi-agent-runner';
 import { resolveAgentName, type AgentDefinition } from './agents.ts';
 import { buildLaunch, discoverSkills, skillResolver } from './launch.ts';
+import { modelSupportsImages } from './vision.ts';
+import { visionTool, type VisionToolDeps } from './vision-tool.ts';
 
 export type RunState = 'starting' | 'running' | RunStatus;
 
@@ -482,6 +484,9 @@ export class RunRegistry {
 export interface StarterContext {
   parent: ParentContext;
   cwd: string;
+  // present when the vision agent is callable: children whose own model
+  // cannot see images get a `vision` tool (see buildLaunch)
+  vision?: VisionToolDeps & { available: () => boolean };
 }
 
 // production wiring: buildLaunch + startAgent
@@ -492,10 +497,17 @@ export const defaultStarter =
     const skills = def.skills.length
       ? skillResolver(await discoverSkills(cwd))
       : undefined;
+    const { vision } = ctx;
     const launch = buildLaunch(def, {
       parent: ctx.parent,
       cwd,
       resolveSkill: skills,
+      ...(vision?.available() && {
+        vision: {
+          childSeesImages: modelSupportsImages(ctx.parent.ctx, def.models[0]),
+          tool: (child) => visionTool(child, vision),
+        },
+      }),
     });
     const handle = await startAgent({
       ...launch.start,

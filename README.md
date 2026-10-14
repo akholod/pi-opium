@@ -61,7 +61,7 @@ While agents run, a list above the editor shows what each one is doing.
 | designer     | UI and UX, built and polished                    |
 | fixer        | writes the code for a clear, bounded task        |
 | fast-generic | git, commits, tests, builds                      |
-| vision       | screenshots, PDFs, diagrams                      |
+| vision       | images for models that can't see them            |
 | council      | three models answer, one sums up where they land |
 
 ## Handy commands

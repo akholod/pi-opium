@@ -26,6 +26,9 @@ export interface ToolDeps {
   loadDef: (name: string) => AgentDefinition;
   // names of the callable (advertised) agents
   agentNames: () => string[];
+  // reason an otherwise callable agent must not run now (vision, when the
+  // session model can read images itself)
+  refuse?: (name: string) => string | undefined;
   cwd: string;
   now?: () => number;
   // live activity of a retained run; the runner's registry by default
@@ -111,6 +114,8 @@ export const formatRun = (run: RunRecord): string => {
 
 const callable = (deps: ToolDeps, requested: string): AgentDefinition => {
   const name = resolveAgentName(requested);
+  const refusal = deps.refuse?.(name);
+  if (refusal) throw new Error(`agent "${name}" is not needed: ${refusal}`);
   const names = deps.agentNames();
   if (!names.includes(name)) {
     throw new Error(

@@ -44,6 +44,13 @@ import {
   injectReminders,
 } from '../src/reminders.ts';
 import { createWake, type Wake } from '../src/wake.ts';
+import {
+  VISION_AGENT,
+  VISION_REFUSAL,
+  imageInput,
+  orchestratorAgents,
+  supportsImages,
+} from '../src/vision.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
 import { applyPresetCommand } from '../src/presets.ts';
@@ -56,6 +63,7 @@ import {
 } from '../src/council.ts';
 
 const SECTION = 'orchestrator';
+const CONTINUE = { action: 'continue' } as const;
 
 const agentOverrides = (path: string) => readAgentOverrides(path);
 
@@ -112,8 +120,19 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   for (const guard of sessionGuards) guard(pi);
   registerWorkflowCommands(pi);
   let state = readState(path);
-  // the roster names only agents the `agent` tool can call
-  const prompt = buildOrchestratorPrompt({ available: defaultAgentNames() });
+  // the roster names only agents the `agent` tool can call; vision only for
+  // a session model that cannot see images, so it is built per model state
+  const prompts = new Map<string, string>();
+  const promptFor = (model: ExtensionContext['model']): string => {
+    const available = orchestratorAgents(defaultAgentNames(), model);
+    const key = available.join(',');
+    let prompt = prompts.get(key);
+    if (prompt === undefined) {
+      prompt = buildOrchestratorPrompt({ available });
+      prompts.set(key, prompt);
+    }
+    return prompt;
+  };
   // pi-agent-runner never loads Opium into its children. pi-subagents, if
   // installed alongside, does; its children must not be told to
   // orchestrate and delegate.
@@ -145,6 +164,10 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
               },
             },
             cwd: ctx.cwd,
+            vision: {
+              loadDef: defaultLoadDef,
+              available: () => defaultAgentNames().includes(VISION_AGENT),
+            },
           })
         )(def, options),
       onTerminal: (run) => sink.delivery?.deliver(run),
@@ -214,7 +237,12 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   pi.on('input', (event, ctx) => {
     if (event.source !== 'extension') {
       wake.userInput();
-      return undefined;
+      // a model that cannot see images gets the files and a pointer to vision
+      return (
+        (!isSubagentChild && defaultAgentNames().includes(VISION_AGENT)
+          ? imageInput(event, ctx)
+          : undefined) ?? CONTINUE
+      );
     }
     // Pi marks nothing on the resulting user message, so remember the text
     // durably; the context handler then skips it (see src/reminders.ts)
@@ -222,7 +250,7 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     if (!extensionInputHashes(branchOf(ctx)).has(hash)) {
       pi.appendEntry(EXTENSION_INPUT_ENTRY, { hash });
     }
-    return undefined;
+    return CONTINUE;
   });
   pi.on('session_shutdown', async () => {
     wake.stop();
@@ -239,13 +267,17 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   registerAgentTools(pi, (ctx) => ({
     registry: getRegistry(ctx),
     loadDef: defaultLoadDef,
-    agentNames: defaultAgentNames,
+    agentNames: () => orchestratorAgents(defaultAgentNames(), ctx.model),
+    refuse: (name) =>
+      name === VISION_AGENT && supportsImages(ctx.model) === true
+        ? VISION_REFUSAL
+        : undefined,
     cwd: ctx.cwd,
   }));
 
-  pi.on('before_agent_start', (event) => {
+  pi.on('before_agent_start', (event, ctx) => {
     if (isSubagentChild || !state.orchestrator) return {};
-    event.systemPromptOptions.sections[SECTION] = prompt;
+    event.systemPromptOptions.sections[SECTION] = promptFor(ctx.model);
     const runs = registry?.list() ?? [];
     const now = Date.now();
     const board = formatBoard(runs, now);
