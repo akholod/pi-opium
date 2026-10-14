@@ -1,131 +1,118 @@
-# pi-opium
+<p align="center">
+  <img src="assets/hero.webp" alt="Opium: an orchestrator of specialist agents for Pi" width="100%">
+</p>
 
-Daily-work orchestration for pi, ported from oh-my-opencode-slim: an
-orchestrator prompt for the main session, specialist agents (scout,
-researcher, senior, designer, fixer, fast-generic, vision) and a
-multi-model council. Agents run in-process through
-[pi-agent-runner](https://github.com/akholod/pi-agent-runner); no other
-subagent extension is needed.
+# Opium
 
-For the full roster install `pi-mcp-adapter` with a `codegraph` server
-(scout, fixer, senior) and `pi-web-access` (researcher).
+Turn your Pi session into a small team.
+
+## The problem
+
+One agent doing everything in one chat gets slow and blurry. It searches
+the codebase, reads docs, writes code and reviews it, all in the same
+context, while you wait. The context fills up with grep output, and a big
+decision rests on a single model's opinion.
+
+## What Opium does
+
+Your Pi session becomes the lead. It hands work to specialists that run in
+the background while you keep talking, and their results come back to your
+session on their own. When a decision matters, it asks a council of
+different models and shows you where they agree.
+
+```text
+agents ─────────────────────────────────────────── 2 running
+⠋ fixer       opium  sonnet-5-5  t4  bash        12.3k  0:41
+⠙ scout       opium  gpt-6-luna  t2  grep         3.1k  0:08
+✓ researcher  opium  gpt-6-luna  t6  done         8.1k  0:22
+```
 
 ## Install
 
-```bash
+```sh
 pi install git:github.com/akholod/pi-opium
 ```
 
-Then in pi: `/reload` and pick the orchestrator model for the main session
-(`/model openai-codex/gpt-6-sol`).
+Start Pi (or `/reload` a running session) and keep working as usual. Every agent starts on your
+session's model, so it works with whatever provider you have.
 
-## Usage
+Your session's model is the lead: it decides what to hand off and to whom.
+Pick a strong one (`/model`). For web research, also install
+`pi-web-access`.
 
-The orchestrator prompt is on by default and delegates through the
-`agent` tools:
+## How it looks in practice
 
-| Tool            | Purpose                                                    |
-| --------------- | ---------------------------------------------------------- |
-| `agent`         | Start a specialist (background or foreground), or `resume` |
-| `agent_status`  | One run, or every run of this session                      |
-| `agent_result`  | The result of a finished run                               |
-| `agent_message` | A note to a running specialist (`queue` or `steer`)        |
-| `agent_cancel`  | Stop the current run; the session is kept                  |
-| `agent_revive`  | Continue a finished or cancelled run with a new task       |
+Just ask:
 
-Background results are delivered to the session when they finish: as a
-new turn when it is idle, steered into the current turn when it is busy.
+- "Find where auth tokens are refreshed" → scout searches, you keep going.
+- "Fix the failing tests in `api/`" → fixer works in the background and
+  reports back.
+- "Get a second opinion on this migration plan" → the council answers.
 
-```
-/orchestrator on | off | status
-/council <question>
-```
+While agents run, a list above the editor shows what each one is doing.
 
-The council is also available to the model as the `council` tool.
+## The team
 
-## Agents
+| Agent        | Does                                             |
+| ------------ | ------------------------------------------------ |
+| scout        | finds files and code, fast                       |
+| researcher   | reads docs and the web, answers with sources     |
+| senior       | architecture, hard bugs, code review             |
+| designer     | UI and UX, built and polished                    |
+| fixer        | writes the code for a clear, bounded task        |
+| fast-generic | git, commits, tests, builds                      |
+| vision       | screenshots, PDFs, diagrams                      |
+| council      | three models answer, one sums up where they land |
 
-Agent prompts are in `agents/*.md`, with structural metadata only (`name`,
-`description`, `tools`, `advertise`, `contextFiles`); copy a file to
-`~/.pi/agent/agents/` to replace it. A runtime key (`model`, `thinking`,
-`timeoutMs`, ...) in an `.md` is an error: those values live in
-`~/.pi/agent/opium.json`, the single configuration file. The shipped defaults
-for every agent are in `defaults/opium.json`; on first run, when
-`~/.pi/agent/opium.json` does not exist, it is created as a copy of them. An
-existing file is never touched or merged with the defaults. Example:
+## Handy commands
+
+- `/council <question>`: ask the council directly.
+- `/opium-preset [name|off]`: switch the models the team uses.
+- `/reflect`: review how the session went and suggest improvements.
+- `/deepwork <task>`: a stricter workflow for big, risky changes.
+- `/orchestrator off`: back to a plain Pi session.
+
+## Works better with
+
+- [pi-web-access](https://github.com/nicobailon/pi-web-access): lets researcher search the web and read pages.
+- MCP servers added with `pi mcp add`: give an agent a server in `opium.json`, for example `"scout": { "mcpServers": ["my-index"] }`.
+
+## Config
+
+One file: `~/.pi/agent/opium.json`, created on first run. Out of the box
+every agent uses your session's model. Give an agent its own model, a
+backup model or a time limit:
 
 ```json
 {
-  "orchestrator": true,
-  "wake": { "enabled": true, "intervalMs": 300000 },
-  "preset": "cheap",
-  "presets": {
-    "base": { "fixer": { "model": "openai-codex/gpt-6-sol" } },
-    "cheap": { "extends": "base", "senior": { "thinking": "low" } }
-  },
   "agents": {
     "senior": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
     "fixer": {
-      "timeoutMs": 7200000,
-      "idleTimeoutMs": 600000,
-      "wrapUpMs": 180000,
-      "gitGuard": true,
-      "skills": ["tdd"]
-    },
-    "councillor-alpha": {
-      "model": "openai-codex/gpt-6-sol",
-      "fallbackModels": ["claude-bridge/claude-fable-5-1"]
-    },
-    "councillor-beta": {
-      "model": "claude-bridge/claude-fable-5-1",
-      "fallbackModels": ["openai-codex/gpt-6-sol"]
-    },
-    "councillor-gamma": { "model": "claude-bridge/claude-opus-5-5" },
-    "council": { "model": "claude-bridge/claude-fable-5-1" }
+      "model": "openai-codex/gpt-6-luna",
+      "fallbackModels": ["claude-bridge/claude-sonnet-5-5"]
+    }
   }
 }
 ```
 
-- `orchestrator`: enable the orchestrator prompt (`/orchestrator on|off`).
-- `wake { enabled, intervalMs }`: periodic wake-up for running background
-  agents.
-- `preset` / `presets`: named sets of per-agent overrides; a preset may
-  `extends` another. `/opium-preset [name|off]` lists or switches.
-- `agents.<name>`: per-agent overrides, also valid inside a preset. Council
-  seats (`councillor-alpha|beta|gamma`) and the synthesizer (`council`) are
-  ordinary agents and use the same overrides.
+**The council needs different models.** Three seats on the same model is
+one opinion said three times. Give `councillor-alpha`, `councillor-beta`
+and `councillor-gamma` different models; Opium warns you until you do.
 
-Override fields (unknown fields are errors; an invalid value is reported as a
-warning and that field is ignored). When `opium.json` sets nothing for an
-agent, the built-in fallbacks apply: model `inherit` (the parent session's),
-thinking inherited, no timeouts, `background` false, `permissionAsks`
-`forward`, `gitGuard` true, no skills.
+Ready-made configs: [ideal](docs/examples/ideal.md) (Claude, OpenAI and
+open models together) and [OpenAI only](docs/examples/openai.md). Every
+option: [docs/configuration.md](docs/configuration.md).
 
-| Field            | Value                                                     |
-| ---------------- | --------------------------------------------------------- |
-| `model`          | `provider/id`                                             |
-| `fallbackModels` | list of `provider/id`                                     |
-| `thinking`       | `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
-| `timeoutMs`      | positive number (ms), the hard cap on a generation        |
-| `idleTimeoutMs`  | positive number (ms), stop after this long with no events |
-| `wrapUpMs`       | positive number (ms), grace to answer after `timeoutMs`   |
-| `toolTimeoutMs`  | positive number                                           |
-| `background`     | `true` / `false`                                          |
-| `permissionAsks` | `forward` or `deny`                                       |
-| `gitGuard`       | `true` / `false`                                          |
-| `skills`         | list of skill names                                       |
+## Under the hood
 
-`timeoutMs` is the wall-clock cap of one generation. When it expires the agent
-is asked to give its final answer and is stopped only if none arrives within
-`wrapUpMs`; a wrapped-up answer is reported with a note, and a stopped run
-(`timed_out`) keeps its session, so `agent_revive` can get its report or
-continue. `idleTimeoutMs` stops an agent that produced no events for that long;
-it is paused while a tool runs or a person is asked.
+Agents run inside your Pi process through
+[pi-agent-runner](https://github.com/akholod/pi-agent-runner). They follow
+your permission rules, ask you in the usual dialog, and wrap up with a
+report when their time runs out.
 
-Precedence, per field, lowest to highest: the built-in fallbacks < the active
-preset < `agents`.
+## Credits
 
-`~/.pi/agent/settings.json` is no longer read: `subagents.agentOverrides`
-there has no effect, so move those values into `agents` in `opium.json`.
+Inspired by
+[oh-my-opencode-slim](https://github.com/alvinunreal/oh-my-opencode-slim).
 
-Run transcripts are kept in `~/.pi/agent/opium/runs/`.
+MIT
