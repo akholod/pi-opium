@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/akholod/pi-opium/blob/main/docs/troubleshooting.md
+    about: What the doctor's warnings mean and how to fix them.

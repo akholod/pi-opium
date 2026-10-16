@@ -1,0 +1,36 @@
+name: Bug report
+description: Something in Opium does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: >-
+        Paste the output of `pi -p --no-session "/opium-doctor"`
+        (add `--live` if a model fails).
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `pi --version`, and `node --version`.
+      placeholder: pi 1.3.0, node v24.16.0
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: >-
+        Terminal (herdr, tmux, ...), screenshots, the relevant part of
+        `~/.pi/agent/opium.json`. Never paste API keys or `auth.json`.
