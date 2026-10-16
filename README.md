@@ -23,12 +23,12 @@ the background while you keep talking, and their results come back to your
 session on their own. When a decision matters, it asks a council of
 different models and shows you where they agree.
 
-```text
-agents ─────────────────────────────────────────── 2 running
-⠋ fixer       opium  sonnet-5-5  t4  bash        12.3k  0:41
-⠙ scout       opium  gpt-6-luna  t2  grep         3.1k  0:08
-✓ researcher  opium  gpt-6-luna  t6  done         8.1k  0:22
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/akholod/pi-opium/main/assets/demo.gif" alt="One request: scout, researcher and senior work in parallel, each in its own live pane, and the lead merges their reports" width="100%">
+</p>
+
+One request, three agents at once, each in its own live pane (tmux here).
+The lead merges their reports and checks where they disagree.
 
 ## Install
 
