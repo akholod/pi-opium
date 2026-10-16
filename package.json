@@ -27,8 +27,12 @@
     "agents",
     "defaults",
     "skills",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "pi": {
     "extensions": [
       "./extensions"

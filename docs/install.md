@@ -104,7 +104,9 @@ skip pi-lens, tell the user, and leave it out of step 5.
 
 Opium's whole config is `~/.pi/agent/opium.json` (in
 `$PI_CODING_AGENT_DIR` instead, when that is set). Opium creates it from
-its defaults the first time Pi loads it. Run this once so the file exists:
+its defaults the first time Pi loads it. Run this once so the file exists
+(it needs one signed-in provider from step 3; with none, Pi stops with
+`No API key found` before loading Opium):
 
 ```sh
 pi -p --no-session "/opium-doctor"

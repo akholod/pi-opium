@@ -1,8 +1,11 @@
 <p align="center">
-  <img src="assets/hero.webp" alt="Opium: an orchestrator of specialist agents for Pi" width="100%">
+  <img src="https://raw.githubusercontent.com/akholod/pi-opium/main/assets/hero.webp" alt="Opium: an orchestrator of specialist agents for Pi" width="100%">
 </p>
 
 # Opium
+
+[![CI](https://github.com/akholod/pi-opium/actions/workflows/ci.yml/badge.svg)](https://github.com/akholod/pi-opium/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/pi-opium)](https://www.npmjs.com/package/pi-opium)
 
 Turn your Pi session into a small team.
 
@@ -116,15 +119,15 @@ one opinion said three times. Give `councillor-alpha`, `councillor-beta`
 and `councillor-gamma` different models; Opium warns you until you do.
 
 Ready-made presets for Claude, ChatGPT, Copilot, OpenCode Go, Gemini and
-a mix of them: [docs/models.md](docs/models.md).
+a mix of them: [docs/models.md](https://github.com/akholod/pi-opium/blob/main/docs/models.md).
 
 ## Docs
 
-- [Install](docs/install.md): step by step, written for an agent but fine by hand.
-- [Models](docs/models.md): which model for which role, presets per subscription.
-- [Agents](docs/agents.md): who does what, what each may do, time limits.
-- [Configuration](docs/configuration.md): every option in `opium.json`.
-- [Troubleshooting](docs/troubleshooting.md): what the doctor's warnings mean.
+- [Install](https://github.com/akholod/pi-opium/blob/main/docs/install.md): step by step, written for an agent but fine by hand.
+- [Models](https://github.com/akholod/pi-opium/blob/main/docs/models.md): which model for which role, presets per subscription.
+- [Agents](https://github.com/akholod/pi-opium/blob/main/docs/agents.md): who does what, what each may do, time limits.
+- [Configuration](https://github.com/akholod/pi-opium/blob/main/docs/configuration.md): every option in `opium.json`.
+- [Troubleshooting](https://github.com/akholod/pi-opium/blob/main/docs/troubleshooting.md): what the doctor's warnings mean.
 
 ## Under the hood
 
