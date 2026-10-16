@@ -34,8 +34,7 @@ with:
 }
 ```
 
-Complete configs to copy: [ideal](examples/ideal.md),
-[OpenAI only](examples/openai.md).
+Presets for each subscription to copy: [models.md](models.md).
 
 When all three council seats resolve to the same model, `/council` and the
 `council` tool add a note: the answers are not independent opinions.
@@ -59,7 +58,7 @@ existing file is never touched or merged with the defaults. Example:
     "cheap": { "extends": "base", "senior": { "thinking": "low" } }
   },
   "agents": {
-    "senior": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
+    "senior": { "model": "anthropic/claude-fable-5-1", "thinking": "high" },
     "fixer": {
       "timeoutMs": 7200000,
       "idleTimeoutMs": 600000,
@@ -69,14 +68,14 @@ existing file is never touched or merged with the defaults. Example:
     },
     "councillor-alpha": {
       "model": "openai-codex/gpt-6-sol",
-      "fallbackModels": ["claude-bridge/claude-fable-5-1"]
+      "fallbackModels": ["anthropic/claude-fable-5-1"]
     },
     "councillor-beta": {
-      "model": "claude-bridge/claude-fable-5-1",
+      "model": "anthropic/claude-fable-5-1",
       "fallbackModels": ["openai-codex/gpt-6-sol"]
     },
-    "councillor-gamma": { "model": "claude-bridge/claude-opus-5-5" },
-    "council": { "model": "claude-bridge/claude-fable-5-1" }
+    "councillor-gamma": { "model": "anthropic/claude-opus-5-5" },
+    "council": { "model": "anthropic/claude-fable-5-1" }
   }
 }
 ```

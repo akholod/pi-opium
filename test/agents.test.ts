@@ -293,41 +293,44 @@ test('shipped agents have no mcp: entries and need no packages but web', () => {
   }
 });
 
-test('the ideal example parses; codegraph, docs MCP and pi-lens are wired', () => {
-  const text = readFileSync(join(root, 'docs', 'examples', 'ideal.md'), 'utf8');
-  const json = /```json\n([\s\S]*?)\n```/.exec(text)?.[1];
-  assert.ok(json);
-  const dir = tmp();
-  const file = join(dir, 'opium.json');
-  writeFileSync(file, json);
-  const { overrides, errors } = readAgentOverrides(file);
-  assert.deepEqual(errors, []);
-  const { agents } = loadAgents({ dirs: [agentsDir], overrides });
-  for (const name of ['scout', 'fixer', 'senior']) {
-    assert.deepEqual(agents.get(name)?.mcpServers, ['codegraph'], name);
-  }
-  assert.deepEqual(agents.get('researcher')?.mcpServers, [
-    'context7',
-    'gh_grep',
-  ]);
-  for (const name of ['senior', 'fixer']) {
-    assert.deepEqual(agents.get(name)?.packages, ['pi-lens'], name);
-  }
-  assert.deepEqual(agents.get('scout')?.packages, []);
-});
+// docs/models.md: the presets the install guide tells agents to copy
+const modelPresets = (): Record<string, unknown> => {
+  const text = readFileSync(join(root, 'docs', 'models.md'), 'utf8');
+  const blocks = [...text.matchAll(/```json\n([\s\S]*?)\n```/g)]
+    .map((match) => match[1])
+    .filter((block) => /^"[a-z-]+": \{/.test(block));
+  return JSON.parse(`{${blocks.join(',')}}`) as Record<string, unknown>;
+};
 
-test('the openai example gives researcher the docs MCP servers', () => {
-  const text = readFileSync(
-    join(root, 'docs', 'examples', 'openai.md'),
-    'utf8',
-  );
-  const json = /```json\n([\s\S]*?)\n```/.exec(text)?.[1];
-  assert.ok(json);
-  const file = join(tmp(), 'opium.json');
-  writeFileSync(file, json);
-  const { overrides, errors } = readAgentOverrides(file);
-  assert.deepEqual(errors, []);
-  assert.deepEqual(overrides.researcher?.mcpServers, ['context7', 'gh_grep']);
+test('each docs/models.md preset on top of the defaults sets every model', () => {
+  const presets = modelPresets();
+  assert.ok(Object.keys(presets).length >= 5);
+  const defaults = JSON.parse(
+    readFileSync(join(root, 'defaults', 'opium.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  const { agents: shipped } = loadAgents({ dirs: [agentsDir] });
+  for (const name of Object.keys(presets)) {
+    const file = join(tmp(), 'opium.json');
+    writeFileSync(file, JSON.stringify({ ...defaults, preset: name, presets }));
+    const { overrides, errors } = readAgentOverrides(file);
+    assert.deepEqual(errors, [], name);
+    const { agents } = loadAgents({ dirs: [agentsDir], overrides });
+    for (const agent of shipped.values()) {
+      const model = agents.get(agent.name)?.models[0];
+      assert.match(model ?? '', /^[a-z-]+\/\S+$/, `${name}: ${agent.name}`);
+    }
+    const seats = ['alpha', 'beta', 'gamma'].map(
+      (seat) => agents.get(`councillor-${seat}`)?.models[0],
+    );
+    assert.equal(new Set(seats).size, 3, `${name}: council seats`);
+    // a preset sets models only; the defaults' tuning stays in force
+    assert.equal(agents.get('senior')?.thinking, 'xhigh', name);
+    assert.equal(agents.get('fixer')?.background, true, name);
+    assert.deepEqual(agents.get('researcher')?.mcpServers, [
+      'context7',
+      'gh_grep',
+    ]);
+  }
 });
 
 test('extensions merge into packages, extraTools replace; both default empty', () => {

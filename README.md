@@ -29,6 +29,18 @@ agents ────────────────────────�
 
 ## Install
 
+Paste this into your coding agent (Pi, Claude Code, Codex, ...):
+
+```text
+Install and configure Opium for Pi by following https://raw.githubusercontent.com/akholod/pi-opium/main/docs/install.md
+```
+
+It asks which subscriptions you have and whether you want the full setup
+with the recommended extras, gives every agent a model that fits, and
+checks the result.
+
+Or by hand:
+
 ```sh
 pi install git:github.com/akholod/pi-opium
 ```
@@ -90,10 +102,10 @@ backup model or a time limit:
 ```json
 {
   "agents": {
-    "senior": { "model": "claude-bridge/claude-fable-5-1", "thinking": "high" },
+    "senior": { "model": "anthropic/claude-fable-5-1", "thinking": "high" },
     "fixer": {
       "model": "openai-codex/gpt-6-luna",
-      "fallbackModels": ["claude-bridge/claude-sonnet-5-5"]
+      "fallbackModels": ["anthropic/claude-sonnet-5-5"]
     }
   }
 }
@@ -103,9 +115,16 @@ backup model or a time limit:
 one opinion said three times. Give `councillor-alpha`, `councillor-beta`
 and `councillor-gamma` different models; Opium warns you until you do.
 
-Ready-made configs: [ideal](docs/examples/ideal.md) (Claude, OpenAI and
-open models together) and [OpenAI only](docs/examples/openai.md). Every
-option: [docs/configuration.md](docs/configuration.md).
+Ready-made presets for Claude, ChatGPT, Copilot, OpenCode Go, Gemini and
+a mix of them: [docs/models.md](docs/models.md).
+
+## Docs
+
+- [Install](docs/install.md): step by step, written for an agent but fine by hand.
+- [Models](docs/models.md): which model for which role, presets per subscription.
+- [Agents](docs/agents.md): who does what, what each may do, time limits.
+- [Configuration](docs/configuration.md): every option in `opium.json`.
+- [Troubleshooting](docs/troubleshooting.md): what the doctor's warnings mean.
 
 ## Under the hood
 
