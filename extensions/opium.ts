@@ -55,6 +55,13 @@ import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
 import { applyPresetCommand } from '../src/presets.ts';
 import {
+  countChecks,
+  formatDoctor,
+  runDoctor,
+  summaryLine,
+} from '../src/doctor.ts';
+import { realDoctorDeps } from '../src/doctor-env.ts';
+import {
   SAME_MODEL_NOTE,
   renderSeats,
   runCouncil,
@@ -387,6 +394,41 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
       ctx.ui.notify(`[opium] ${reply.text}`, reply.error ? 'error' : 'info');
     },
   });
+
+  if (!isSubagentChild) {
+    pi.registerCommand('opium-doctor', {
+      description:
+        'Check the Opium setup: config, models, council, skills, MCP, ' +
+        'runner. --live also pings each model',
+      handler: async (args, ctx) => {
+        const flags = args.trim().split(/\s+/).filter(Boolean);
+        const unknown = flags.filter((flag) => flag !== '--live');
+        if (unknown.length > 0) {
+          ctx.ui.notify('usage: /opium-doctor [--live]', 'error');
+          return;
+        }
+        const live = flags.includes('--live');
+        ctx.ui.notify(
+          `[opium] doctor: checking${live ? ' and pinging models' : ''}...`,
+          'info',
+        );
+        const report = await runDoctor({ live }, realDoctorDeps(ctx, path));
+        pi.sendMessage(
+          {
+            customType: 'opium-doctor',
+            content: formatDoctor(report),
+            display: true,
+          },
+          { triggerTurn: false },
+        );
+        const { fail, warn } = countChecks(report);
+        let level: 'info' | 'warning' | 'error' = 'info';
+        if (fail > 0) level = 'error';
+        else if (warn > 0) level = 'warning';
+        ctx.ui.notify(`[opium] doctor: ${summaryLine(report)}`, level);
+      },
+    });
+  }
 
   pi.registerTool({
     name: 'opium_preset',

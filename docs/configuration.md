@@ -2,6 +2,10 @@
 
 Everything Opium reads from `~/.pi/agent/opium.json`, the only configuration file. Back to the [README](../README.md).
 
+Not sure the file does what you meant? Run `/opium-doctor` in Pi: it checks
+the config, every agent's models and credentials, the council, skills, MCP
+servers and the runner, and `/opium-doctor --live` also pings each model.
+
 ## Agents and `opium.json`
 
 Out of the box no agent has a `model`, so every agent, council seats

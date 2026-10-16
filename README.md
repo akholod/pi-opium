@@ -68,6 +68,7 @@ While agents run, a list above the editor shows what each one is doing.
 
 - `/council <question>`: ask the council directly.
 - `/opium-preset [name|off]`: switch the models the team uses.
+- `/opium-doctor`: check your setup; `--live` also pings every model.
 - `/reflect`: review how the session went and suggest improvements.
 - `/deepwork <task>`: a stricter workflow for big, risky changes.
 - `/orchestrator off`: back to a plain Pi session.
