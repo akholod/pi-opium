@@ -94,6 +94,7 @@ export const RUNNER_EXPORTS: readonly string[] = [
   'humanWaitTracker',
   'isPossiblyStuck',
   'liveRuns',
+  'mountPanes',
   'mountRunsView',
   'runAgent',
   'startAgent',
@@ -101,8 +102,12 @@ export const RUNNER_EXPORTS: readonly string[] = [
 
 const PING_TIMEOUT_MS = 30_000;
 const PING_CONCURRENCY = 4;
-// shipped default of scout, fixer and senior; absent is fine
-const OPTIONAL_MCP: readonly string[] = ['codegraph'];
+// shipped defaults of scout, fixer, senior and researcher; absent is fine
+const OPTIONAL_MCP: ReadonlySet<string> = new Set([
+  'codegraph',
+  'context7',
+  'gh_grep',
+]);
 
 const ok = (title: string, detail?: string): Check => ({
   status: 'ok',
@@ -339,7 +344,7 @@ const checkMcp = (
           title: `${label} is configured but unusable`,
           detail: mcp.errors.join('\n'),
         });
-      } else if (OPTIONAL_MCP.includes(server)) {
+      } else if (OPTIONAL_MCP.has(server)) {
         checks.push(ok(`${label} not configured, agent works without it`));
       } else {
         checks.push({

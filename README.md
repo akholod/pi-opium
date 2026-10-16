@@ -50,6 +50,8 @@ Just ask:
 - "Get a second opinion on this migration plan" → the council answers.
 
 While agents run, a list above the editor shows what each one is doing.
+Inside herdr or tmux, each one also gets a read-only pane that closes when
+it's done.
 
 ## The team
 
@@ -76,7 +78,8 @@ While agents run, a list above the editor shows what each one is doing.
 ## Works better with
 
 - [pi-web-access](https://github.com/nicobailon/pi-web-access): lets researcher search the web and read pages.
-- MCP servers added with `pi mcp add`: give an agent a server in `opium.json`, for example `"scout": { "mcpServers": ["my-index"] }`.
+- `pi mcp add context7 --url https://mcp.context7.com/mcp` and `pi mcp add gh_grep --url https://mcp.grep.app`: up-to-date library docs and GitHub code search for researcher.
+- Any other MCP server added with `pi mcp add`: give it to an agent in `opium.json`, for example `"scout": { "mcpServers": ["my-index"] }`.
 
 ## Config
 

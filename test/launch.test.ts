@@ -7,7 +7,9 @@ import {
   type AgentOverride,
 } from '../src/agents.ts';
 import {
+  activateAllowed,
   buildLaunch,
+  readOnlyLsp,
   skillResolver,
   type LaunchContext,
 } from '../src/launch.ts';
@@ -211,4 +213,130 @@ test('skillResolver reads the skill file without frontmatter', () => {
     content: 'Do one.',
   });
   assert.equal(resolve('gone', '/work'), undefined);
+});
+
+test('extensions merge into packages; pi-lens adds its read-only tools', () => {
+  const def = agent('tools: read, grep\n', { extensions: ['pi-lens'] });
+  const { start } = buildLaunch(def, base);
+  assert.deepEqual(start.extensions, { packages: ['pi-lens'] });
+  assert.deepEqual(start.tools, [
+    'read',
+    'grep',
+    'lsp_navigation',
+    'lens_diagnostics',
+    'ast_grep_search',
+    'ast_grep_outline',
+    'symbol_search',
+    'read_symbol',
+    'read_enclosing',
+  ]);
+  assert.ok(!start.tools?.includes('ast_grep_replace'));
+});
+
+test('extraTools patterns are appended once, with or without extensions', () => {
+  const def = agent('tools: read, ast_grep_replace\n', {
+    extensions: ['pi-lens'],
+    extraTools: ['ast_grep_replace', 'lens_*'],
+  });
+  const { start } = buildLaunch(def, base);
+  assert.equal(
+    start.tools?.filter((tool) => tool === 'ast_grep_replace').length,
+    1,
+  );
+  assert.ok(start.tools?.includes('lens_*'));
+  const alone = buildLaunch(
+    agent('tools: read\n', { extraTools: ['x_*'] }),
+    base,
+  );
+  assert.deepEqual(alone.start.tools, ['read', 'x_*']);
+  assert.equal(alone.start.extensions, 'none');
+});
+
+test('extensions keep the other packages and the adapter, without duplicates', () => {
+  const def = agent('tools: read, web_search\n', {
+    extensions: ['pi-lens', 'pi-web-access'],
+    mcpServers: ['notes'],
+  });
+  const { start } = buildLaunch(def, {
+    ...base,
+    ...builtin(),
+    resolveMcp: () => ({ tools: ['notes_a'], errors: [] }),
+  });
+  assert.deepEqual(start.extensions, {
+    packages: ['pi-mcp-adapter', 'pi-web-access', 'pi-lens'],
+  });
+});
+
+test('without a tool list extensions load but no allowlist appears', () => {
+  const { start } = buildLaunch(
+    agent('', { extensions: ['pi-lens'], extraTools: ['x'] }),
+    base,
+  );
+  assert.deepEqual(start.extensions, { packages: ['pi-lens'] });
+  assert.equal(start.tools, undefined);
+});
+
+test('lsp_navigation cannot change files for an agent without edit or write', async () => {
+  const readOnly = buildLaunch(
+    agent('tools: read, grep\n', { extensions: ['pi-lens'] }),
+    base,
+  ).start;
+  assert.ok(readOnly.extensionFactories?.includes(readOnlyLsp));
+  const writer = buildLaunch(
+    agent('tools: read, edit, write\n', { extensions: ['pi-lens'] }),
+    base,
+  ).start;
+  assert.ok(!writer.extensionFactories?.includes(readOnlyLsp));
+
+  type Handler = (event: unknown) => unknown;
+  let handler: Handler | undefined;
+  readOnlyLsp({
+    on: (_name: string, fn: Handler) => {
+      handler = fn;
+    },
+  } as never);
+  const call = (toolName: string, operation: string) =>
+    handler?.({ toolName, input: { operation } });
+  assert.equal(call('lsp_navigation', 'definition'), undefined);
+  assert.equal(call('lsp_navigation', 'references'), undefined);
+  for (const op of ['rename', 'rename_file', 'codeAction', 'executeCommand']) {
+    assert.match(
+      (call('lsp_navigation', op) as { reason: string }).reason,
+      new RegExp(`${op} changes files`),
+    );
+  }
+  assert.equal(call('read', 'rename'), undefined);
+});
+
+test('allowlisted tools pi-lens left inactive are switched on before a generation', () => {
+  const start = buildLaunch(
+    agent('tools: read, grep\n', { extensions: ['pi-lens'] }),
+    base,
+  ).start;
+  assert.ok((start.extensionFactories?.length ?? 0) > sessionGuards.length);
+
+  type Handler = () => unknown;
+  let handler: Handler | undefined;
+  let active = ['read', 'grep', 'lens_diagnostics'];
+  activateAllowed(['read', 'grep', 'lsp_navigation', 'mcp__x__*'])({
+    on: (_name: string, fn: Handler) => {
+      handler = fn;
+    },
+    getActiveTools: () => active,
+    getAllTools: () =>
+      ['read', 'grep', 'lsp_navigation', 'ast_grep_replace', 'mcp__x__a'].map(
+        (name) => ({ name }),
+      ),
+    setActiveTools: (names: string[]) => {
+      active = names;
+    },
+  } as never);
+  handler?.();
+  assert.deepEqual(active, [
+    'read',
+    'grep',
+    'lens_diagnostics',
+    'lsp_navigation',
+    'mcp__x__a',
+  ]);
 });

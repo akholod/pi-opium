@@ -87,11 +87,13 @@ test('defaults/opium.json parses; every agent inherits the model', () => {
     assert.equal(override.fallbackModels, undefined, name);
     // MCP is asked for only where a code index helps; a missing server is
     // skipped quietly
-    assert.deepEqual(
-      override.mcpServers,
-      ['scout', 'fixer', 'senior'].includes(name) ? ['codegraph'] : undefined,
-      name,
-    );
+    const expected: Record<string, string[]> = {
+      scout: ['codegraph'],
+      fixer: ['codegraph'],
+      senior: ['codegraph'],
+      researcher: ['context7', 'gh_grep'],
+    };
+    assert.deepEqual(override.mcpServers, expected[name], name);
     assert.ok(override.thinking, name);
     assert.ok(override.timeoutMs, name);
     assert.equal(override.idleTimeoutMs, 600000, name);
@@ -291,7 +293,7 @@ test('shipped agents have no mcp: entries and need no packages but web', () => {
   }
 });
 
-test('the ideal example parses and gives scout, fixer, senior codegraph', () => {
+test('the ideal example parses; codegraph, docs MCP and pi-lens are wired', () => {
   const text = readFileSync(join(root, 'docs', 'examples', 'ideal.md'), 'utf8');
   const json = /```json\n([\s\S]*?)\n```/.exec(text)?.[1];
   assert.ok(json);
@@ -304,7 +306,58 @@ test('the ideal example parses and gives scout, fixer, senior codegraph', () => 
   for (const name of ['scout', 'fixer', 'senior']) {
     assert.deepEqual(agents.get(name)?.mcpServers, ['codegraph'], name);
   }
-  assert.deepEqual(agents.get('researcher')?.mcpServers, []);
+  assert.deepEqual(agents.get('researcher')?.mcpServers, [
+    'context7',
+    'gh_grep',
+  ]);
+  for (const name of ['senior', 'fixer']) {
+    assert.deepEqual(agents.get(name)?.packages, ['pi-lens'], name);
+  }
+  assert.deepEqual(agents.get('scout')?.packages, []);
+});
+
+test('the openai example gives researcher the docs MCP servers', () => {
+  const text = readFileSync(
+    join(root, 'docs', 'examples', 'openai.md'),
+    'utf8',
+  );
+  const json = /```json\n([\s\S]*?)\n```/.exec(text)?.[1];
+  assert.ok(json);
+  const file = join(tmp(), 'opium.json');
+  writeFileSync(file, json);
+  const { overrides, errors } = readAgentOverrides(file);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(overrides.researcher?.mcpServers, ['context7', 'gh_grep']);
+});
+
+test('extensions merge into packages, extraTools replace; both default empty', () => {
+  const dir = dirWith({ x: doc('tools: read, web_search\n') });
+  const plain = loadAgent('x', { dirs: [dir] });
+  assert.deepEqual(plain.packages, ['pi-web-access']);
+  assert.deepEqual(plain.extraTools, []);
+  const agent = loadAgent('x', {
+    dirs: [dir],
+    overrides: {
+      x: { extensions: ['pi-lens', 'pi-web-access'], extraTools: ['a_*'] },
+    },
+  });
+  assert.deepEqual(agent.packages, ['pi-web-access', 'pi-lens']);
+  assert.deepEqual(agent.extraTools, ['a_*']);
+});
+
+test('parseOverride reads extensions and extraTools as string lists', () => {
+  const errors: string[] = [];
+  const out = parseOverride(
+    'o.json',
+    'a',
+    { extensions: ['pi-lens'], extraTools: 'ast_grep_replace, lsp_*' },
+    errors,
+  );
+  assert.deepEqual(errors, []);
+  assert.deepEqual(out, {
+    extensions: ['pi-lens'],
+    extraTools: ['ast_grep_replace', 'lsp_*'],
+  });
 });
 
 test('parseOverride accepts the full field list', () => {
@@ -359,6 +412,8 @@ test('parseOverride: an invalid value is an error and the field is ignored', () 
     gitGuard: 3,
     skills: 5,
     mcpServers: 5,
+    extensions: 5,
+    extraTools: { a: 1 },
   };
   for (const [key, value] of Object.entries(bad)) {
     const errors: string[] = [];

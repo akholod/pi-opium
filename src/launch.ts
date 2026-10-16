@@ -96,6 +96,80 @@ export const skillResolver =
     return resolved;
   };
 
+// Tools a package registers that an agent gets without listing them in
+// extraTools: read-only navigation and diagnostics; the mutating
+// ast_grep_replace is left to extraTools.
+const PACKAGE_TOOLS: Readonly<Record<string, readonly string[]>> = {
+  'pi-lens': [
+    'lsp_navigation',
+    'lens_diagnostics',
+    'ast_grep_search',
+    'ast_grep_outline',
+    'symbol_search',
+    'read_symbol',
+    'read_enclosing',
+  ],
+};
+
+// Packages that register tools inactive until asked for: pi-lens turns its
+// "situational" tools off at session start and pi_lens_activate_tools only
+// brings them back on the next prompt, which a child (one prompt per
+// generation) never gets.
+const LAZY_PACKAGES = new Set(['pi-lens']);
+
+const allowedBy = (patterns: readonly string[]) => {
+  const exact = new Set(patterns.filter((p) => !p.includes('*')));
+  const prefixes = patterns
+    .filter((p) => p.endsWith('*') && p.indexOf('*') === p.length - 1)
+    .map((p) => p.slice(0, -1));
+  return (name: string): boolean =>
+    exact.has(name) || prefixes.some((prefix) => name.startsWith(prefix));
+};
+
+// Before each generation, switches on every registered tool the allowlist
+// names that is still inactive.
+export const activateAllowed =
+  (allowed: readonly string[]): ExtensionFactory =>
+  (pi) => {
+    const isAllowed = allowedBy(allowed);
+    pi.on('before_agent_start', () => {
+      const active = pi.getActiveTools();
+      const missing = pi
+        .getAllTools()
+        .map((tool) => tool.name)
+        .filter((name) => !active.includes(name) && isAllowed(name));
+      if (missing.length) pi.setActiveTools([...active, ...missing]);
+      return undefined;
+    });
+  };
+
+// lsp_navigation can also rename symbols and files and run code actions; an
+// agent that cannot edit files must not edit them through it.
+const MUTATING_LSP = new Set([
+  'rename',
+  'rename_file',
+  'codeAction',
+  'executeCommand',
+]);
+
+export const readOnlyLsp: ExtensionFactory = (pi) => {
+  pi.on('tool_call', (event) => {
+    const { operation } = event.input as { operation?: unknown };
+    const mutating =
+      event.toolName === 'lsp_navigation' &&
+      typeof operation === 'string' &&
+      MUTATING_LSP.has(operation);
+    return mutating
+      ? {
+          block: true,
+          reason:
+            `lsp_navigation ${String(operation)} changes files; ` +
+            'this agent is read-only',
+        }
+      : undefined;
+  });
+};
+
 export const buildLaunch = (
   def: AgentDefinition,
   ctx: LaunchContext,
@@ -159,6 +233,16 @@ export const buildLaunch = (
     }
   }
 
+  if (tools !== undefined) {
+    const added = [
+      ...packages.flatMap((name) => PACKAGE_TOOLS[name] ?? []),
+      ...def.extraTools,
+    ];
+    for (const tool of added) {
+      if (!tools.includes(tool)) tools.push(tool);
+    }
+  }
+
   if (vision) {
     systemPrompt += `\n\n${VISION_DISPATCH_LINE}`;
     if (tools !== undefined && !tools.includes(VISION_TOOL)) {
@@ -178,10 +262,22 @@ export const buildLaunch = (
     permissionAsks: def.permissionAsks,
     gitGuard: def.gitGuard,
     // path, loop and JSON error guards in every child, as in slim
-    extensionFactories: vision
-      ? [...sessionGuards, vision.tool(def.name)]
-      : sessionGuards,
+    extensionFactories: sessionGuards,
   };
+  const readOnly =
+    tools?.includes('lsp_navigation') &&
+    !tools.includes('edit') &&
+    !tools.includes('write');
+  const lazy =
+    tools !== undefined && packages.some((name) => LAZY_PACKAGES.has(name));
+  if (vision || readOnly || lazy) {
+    start.extensionFactories = [
+      ...sessionGuards,
+      ...(vision ? [vision.tool(def.name)] : []),
+      ...(readOnly ? [readOnlyLsp] : []),
+      ...(lazy && tools ? [activateAllowed(tools)] : []),
+    ];
+  }
   if (builtin.length) start.mcpServers = builtin;
   if (tools !== undefined) start.tools = tools;
   if (def.thinking !== undefined) start.thinking = def.thinking;

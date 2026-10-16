@@ -61,7 +61,8 @@
       "background": true,
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
-      "wrapUpMs": 180000
+      "wrapUpMs": 180000,
+      "mcpServers": ["context7", "gh_grep"]
     },
     "vision": {
       "thinking": "low",

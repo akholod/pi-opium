@@ -91,6 +91,46 @@ export const readWakeSettings = (path: string): WakeSettings => {
   }
 };
 
+export interface PanesSettings {
+  enabled: boolean;
+  max: number;
+  multiplexer: 'auto' | 'herdr' | 'tmux';
+}
+
+export const DEFAULT_PANES: PanesSettings = {
+  enabled: true,
+  max: 3,
+  multiplexer: 'auto',
+};
+
+// `panes: false` or `panes: { enabled?, max?, multiplexer? }`; live agent
+// panes open only inside herdr or tmux. Invalid values fall back to the
+// defaults.
+export const readPanesSettings = (path: string): PanesSettings => {
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
+      panes?: unknown;
+    } | null;
+    const panes = raw?.panes;
+    if (panes === false) return { ...DEFAULT_PANES, enabled: false };
+    if (typeof panes !== 'object' || panes === null) return DEFAULT_PANES;
+    const { enabled, max, multiplexer } = panes as Record<string, unknown>;
+    return {
+      enabled: typeof enabled === 'boolean' ? enabled : DEFAULT_PANES.enabled,
+      max:
+        typeof max === 'number' && Number.isInteger(max) && max > 0
+          ? max
+          : DEFAULT_PANES.max,
+      multiplexer:
+        multiplexer === 'herdr' || multiplexer === 'tmux'
+          ? multiplexer
+          : DEFAULT_PANES.multiplexer,
+    };
+  } catch {
+    return DEFAULT_PANES;
+  }
+};
+
 // Keeps other keys already in the file (e.g. per-agent `agents` overrides).
 export const writeState = (path: string, state: CrewState): void => {
   let existing: Record<string, unknown> = {};

@@ -29,6 +29,8 @@ export interface AgentDefinition {
   mcpServers: string[];
   // extension packages the agent needs (web search; MCP is decided at launch)
   packages: string[];
+  // extra tool names or `*` patterns added to the allowlist (extraTools)
+  extraTools: string[];
   skills: string[];
   timeoutMs?: number;
   wrapUpMs?: number;
@@ -56,6 +58,9 @@ export interface AgentOverride {
   gitGuard?: boolean;
   skills?: string[];
   mcpServers?: string[];
+  // Pi packages loaded into the child, merged into the agent's packages
+  extensions?: string[];
+  extraTools?: string[];
 }
 
 export type AgentOverrides = Record<string, AgentOverride>;
@@ -303,6 +308,7 @@ const parseDefinition = (
     models: computeModels(undefined, []),
     mcpServers,
     packages,
+    extraTools: [],
     skills: [],
     background: false,
     advertise: optionalBoolean('advertise', fm.advertise, false),
@@ -355,6 +361,14 @@ const withOverride = (
   if (override.skills !== undefined) merged.skills = [...override.skills];
   if (override.mcpServers !== undefined) {
     merged.mcpServers = [...override.mcpServers];
+  }
+  if (override.extensions !== undefined) {
+    merged.packages = [
+      ...new Set([...merged.packages, ...override.extensions]),
+    ];
+  }
+  if (override.extraTools !== undefined) {
+    merged.extraTools = [...override.extraTools];
   }
   merged.models = computeModels(merged.model, merged.fallbackModels);
   return merged;
@@ -460,6 +474,8 @@ const OVERRIDE_KEYS = [
   'gitGuard',
   'skills',
   'mcpServers',
+  'extensions',
+  'extraTools',
 ];
 
 export const parseOverride = (
@@ -506,6 +522,8 @@ export const parseOverride = (
         );
       } else if (key === 'mcpServers') {
         out.mcpServers = parseList('mcpServers', field);
+      } else if (key === 'extensions' || key === 'extraTools') {
+        out[key] = parseList(key, field);
       } else {
         out.skills = parseList('skills', field);
       }

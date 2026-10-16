@@ -14,9 +14,10 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import { humanWaitTracker, mountRunsView } from 'pi-agent-runner';
+import { humanWaitTracker, mountPanes, mountRunsView } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import {
+  readPanesSettings,
   readState,
   readWakeSettings,
   seedDefaults,
@@ -152,6 +153,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
   let latestCtx: ExtensionContext | undefined;
   // shared live list of child runs (Spiral and Opium) above the editor
   let runsView: { dispose(): void } | undefined;
+  // a read-only herdr/tmux pane per running agent
+  let panes: { dispose(): void } | undefined;
   const getRegistry = (ctx: ExtensionContext): RunRegistry => {
     latestCtx = ctx;
     if (registry) return registry;
@@ -232,6 +235,15 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     lastBoard = '';
     runsView?.dispose();
     runsView = isSubagentChild ? undefined : mountRunsView(ctx);
+    panes?.dispose();
+    panes = undefined;
+    const paneSettings = readPanesSettings(path);
+    if (!isSubagentChild && paneSettings.enabled) {
+      panes = mountPanes(ctx, {
+        max: paneSettings.max,
+        multiplexer: paneSettings.multiplexer,
+      });
+    }
   });
   pi.on('agent_start', () => {
     wake.busy();
@@ -263,6 +275,8 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     wake.stop();
     runsView?.dispose();
     runsView = undefined;
+    panes?.dispose();
+    panes = undefined;
     const current = registry;
     registry = undefined;
     latestCtx = undefined;

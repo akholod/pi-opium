@@ -107,6 +107,7 @@ Lead: `/model claude-bridge/claude-opus-5-5`. Copy the JSON to
       "permissionAsks": "forward",
       "gitGuard": true,
       "skills": ["pnpm"],
+      "extensions": ["pi-lens"],
       "mcpServers": ["codegraph"],
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
@@ -118,6 +119,7 @@ Lead: `/model claude-bridge/claude-opus-5-5`. Copy the JSON to
       "background": true,
       "permissionAsks": "forward",
       "gitGuard": true,
+      "mcpServers": ["context7", "gh_grep"],
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000
     },
@@ -139,6 +141,7 @@ Lead: `/model claude-bridge/claude-opus-5-5`. Copy the JSON to
       "permissionAsks": "forward",
       "gitGuard": true,
       "skills": ["simplify"],
+      "extensions": ["pi-lens"],
       "mcpServers": ["codegraph"],
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000

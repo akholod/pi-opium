@@ -110,6 +110,8 @@ thinking inherited, no timeouts, `background` false, `permissionAsks`
 | `gitGuard`       | `true` / `false`                                          |
 | `skills`         | list of skill names                                       |
 | `mcpServers`     | list of MCP server names                                  |
+| `extensions`     | list of Pi package names to load into the agent           |
+| `extraTools`     | list of tool names or `*` patterns to allow the agent     |
 
 `mcpServers` gives an agent MCP servers, for example servers added with
 `pi mcp add`. It replaces any `mcp:<server>` entries in the agent's `.md`
@@ -118,8 +120,29 @@ is used when it has the server enabled; otherwise the server is looked up in
 the `pi-mcp-adapter` config (`~/.config/mcp/mcp.json`) and that extension is
 loaded for the agent. A server found in neither is skipped without a warning.
 Council seats get no MCP servers. By default scout, fixer and senior ask
-for a server named `codegraph`: if you have one, they use it; if not,
+for a server named `codegraph`, and researcher for `context7` and `gh_grep`
+(library docs and GitHub code search): if you have one, they use it; if not,
 nothing happens.
+
+`extensions` loads installed Pi packages into the agent, on top of the ones it
+already needs. Packages it knows get their read-only tools allowed: for
+`pi-lens` that is `lsp_navigation`, `lens_diagnostics`, `ast_grep_search`,
+`ast_grep_outline`, `symbol_search`, `read_symbol` and `read_enclosing`
+(Opium switches on the ones pi-lens keeps inactive before the agent starts).
+For an agent that cannot edit files, `lsp_navigation` operations that change
+files (`rename`, `rename_file`, `codeAction`, `executeCommand`) are refused. `extraTools` allows more tools by name or `*` pattern, for
+example `ast_grep_replace`. Both apply only to agents with a tool list, and
+council seats never get extensions. `/opium-doctor` warns when a package is
+not installed (`pi install npm:pi-lens`).
+
+```json
+{
+  "agents": {
+    "senior": { "extensions": ["pi-lens"] },
+    "fixer": { "extensions": ["pi-lens"], "extraTools": ["ast_grep_replace"] }
+  }
+}
+```
 
 `timeoutMs` is the wall-clock cap of one generation. When it expires the agent
 is asked to give its final answer and is stopped only if none arrives within
@@ -141,3 +164,11 @@ you attach are saved to `.pi/opium/images/<session>/` in the project
 (add it to `.gitignore`) and handed to vision. scout, researcher, senior
 and designer whose own model cannot see images get a `vision` tool that
 runs the vision agent for them, one level deep.
+
+## Live agent panes
+
+Inside herdr or tmux, each running agent opens a read-only pane next to
+yours with its tool calls, thoughts and answers; it closes a few seconds
+after the agent finishes. At most three are open at once. Set
+`"panes": false` to turn them off, or `"panes": { "max": 2, "multiplexer":
+"tmux" }` to tune them.

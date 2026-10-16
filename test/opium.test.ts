@@ -21,6 +21,8 @@ import {
 } from '../src/agents.ts';
 import { runCouncil, sharedSeatModel } from '../src/council.ts';
 import {
+  DEFAULT_PANES,
+  readPanesSettings,
   readState,
   seedDefaults,
   writeState,
@@ -329,6 +331,26 @@ test('council: without opium.json values the seats inherit the model', async () 
     assert.equal(call.model, 'inherit');
     assert.equal(call.thinking, undefined);
   }
+});
+
+test('council: seats get no extensions or extra tools', async () => {
+  const f = fake();
+  const result = await runCouncil({
+    ...base,
+    overrides: {
+      ...seated,
+      'councillor-alpha': {
+        ...seated['councillor-alpha'],
+        extensions: ['pi-lens'],
+        extraTools: ['lsp_navigation'],
+      },
+    },
+    question: 'q',
+    runAgent: f.runAgent,
+  });
+  assert.equal(result.outcome, 'completed', result.error);
+  for (const call of f.calls) assert.equal(call.extensions, 'none');
+  assert.deepEqual(f.calls[0].tools, ['read', 'grep', 'find', 'ls']);
 });
 
 test('council: explicit timeoutMs overrides the agent file', async () => {
@@ -648,5 +670,25 @@ test('council: seats sharing one model are detected', () => {
   assert.equal(
     sharedSeatModel({ agentDirs: dirs, overrides: one }),
     't/councillor-alpha',
+  );
+});
+
+test('panes settings: defaults, off, and custom values', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-panes-'));
+  const file = (value: unknown) => {
+    const path = join(dir, `${Math.random()}.json`);
+    writeFileSync(path, JSON.stringify(value));
+    return path;
+  };
+  assert.deepEqual(readPanesSettings(join(dir, 'missing.json')), DEFAULT_PANES);
+  assert.deepEqual(readPanesSettings(file({})), DEFAULT_PANES);
+  assert.equal(readPanesSettings(file({ panes: false })).enabled, false);
+  assert.deepEqual(
+    readPanesSettings(file({ panes: { max: 2, multiplexer: 'tmux' } })),
+    { enabled: true, max: 2, multiplexer: 'tmux' },
+  );
+  assert.deepEqual(
+    readPanesSettings(file({ panes: { max: 0, multiplexer: 'screen' } })),
+    DEFAULT_PANES,
   );
 });

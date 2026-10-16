@@ -221,6 +221,52 @@ test('MCP: builtin, adapter, missing codegraph, missing user server', async () =
   assert.equal(get('senior: MCP broken is configured but unusable'), 'warn');
 });
 
+test('MCP: the docs servers are optional like codegraph', async () => {
+  const report = await run({
+    readOverrides: () => ({
+      overrides: {
+        ...healthyOverrides,
+        researcher: { mcpServers: ['context7', 'gh_grep'] },
+      },
+      errors: [],
+    }),
+  });
+  const titles = section(report, 'MCP').map((c) => `${c.status} ${c.title}`);
+  for (const server of ['context7', 'gh_grep']) {
+    assert.ok(
+      titles.includes(
+        `ok researcher: MCP ${server} not configured, agent works without it`,
+      ),
+      server,
+    );
+  }
+});
+
+test('extensions: a missing pi-lens warns, an installed one is ok', async () => {
+  const overrides: AgentOverrides = {
+    ...healthyOverrides,
+    senior: { extensions: ['pi-lens'] },
+    fixer: { extensions: ['pi-lens'] },
+  };
+  const missing = await run({
+    readOverrides: () => ({ overrides, errors: [] }),
+  });
+  const lens = section(missing, 'Extensions').find((c) =>
+    c.title.startsWith('pi-lens'),
+  );
+  assert.equal(lens?.status, 'warn');
+  assert.match(lens?.title ?? '', /pi-lens is not installed \(fixer, senior\)/);
+  assert.equal(lens?.fix, 'pi install npm:pi-lens');
+  const installed = await run({
+    readOverrides: () => ({ overrides, errors: [] }),
+    installedPackages: () => ['npm:pi-web-access', 'npm:pi-lens@4.4.3'],
+  });
+  const found = section(installed, 'Extensions').find((c) =>
+    c.title.startsWith('pi-lens'),
+  );
+  assert.equal(found?.status, 'ok');
+});
+
 test('MCP: builtin disabled sends the server to the adapter', async () => {
   const report = await run({
     readOverrides: () => ({

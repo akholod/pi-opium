@@ -118,6 +118,28 @@ test('a preset validates mcpServers like skills', () => {
   assert.deepEqual(overrides.scout, {});
 });
 
+test('a preset validates extensions and extraTools like skills', () => {
+  const opium = join(dir(), 'opium.json');
+  write(opium, {
+    preset: 'p',
+    presets: {
+      p: {
+        senior: { extensions: ['pi-lens'], extraTools: 'a, b_*' },
+        fixer: { extensions: 5, extraTools: 5 },
+      },
+    },
+  });
+  const { overrides, errors } = readAgentOverrides(opium);
+  assert.equal(errors.length, 2);
+  assert.match(errors[0], /extensions/);
+  assert.match(errors[1], /extraTools/);
+  assert.deepEqual(overrides.senior, {
+    extensions: ['pi-lens'],
+    extraTools: ['a', 'b_*'],
+  });
+  assert.deepEqual(overrides.fixer, {});
+});
+
 test('presets.<p>.<legacy> applies to the new agent with a warning; the new key wins', () => {
   const opium = join(dir(), 'opium.json');
   write(opium, {

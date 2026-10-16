@@ -78,6 +78,7 @@ Lead: `/model openai-codex/gpt-6-sol`. Copy the JSON to
     "researcher": {
       "model": "openai-codex/gpt-6-luna",
       "thinking": "high",
+      "mcpServers": ["context7", "gh_grep"],
       "background": true,
       "timeoutMs": 900000,
       "idleTimeoutMs": 600000,
