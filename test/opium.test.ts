@@ -25,6 +25,7 @@ import {
   readPanesSettings,
   readState,
   seedDefaults,
+  statePath,
   writeState,
   DEFAULT_STATE,
 } from '../src/state.ts';
@@ -691,4 +692,17 @@ test('panes settings: defaults, off, and custom values', () => {
     readPanesSettings(file({ panes: { max: 0, multiplexer: 'screen' } })),
     DEFAULT_PANES,
   );
+});
+
+test('opium.json lives in the Pi config dir, PI_CODING_AGENT_DIR included', () => {
+  const previous = process.env.PI_CODING_AGENT_DIR;
+  const dir = mkdtempSync(join(tmpdir(), 'opium-agent-dir-'));
+  process.env.PI_CODING_AGENT_DIR = dir;
+  try {
+    assert.equal(statePath(), join(dir, 'opium.json'));
+  } finally {
+    if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = previous;
+  }
+  assert.equal(statePath('/x/agent'), join('/x/agent', 'opium.json'));
 });

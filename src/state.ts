@@ -8,9 +8,9 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
 
 export interface CrewState {
   orchestrator: boolean;
@@ -18,8 +18,9 @@ export interface CrewState {
 
 export const DEFAULT_STATE: CrewState = { orchestrator: true };
 
-export const statePath = (configDirName: string, homeDir = homedir()): string =>
-  join(homeDir, configDirName, 'agent', 'opium.json');
+// Pi's config directory: `~/.pi/agent`, or `PI_CODING_AGENT_DIR` when set
+export const statePath = (agentDir = getAgentDir()): string =>
+  join(agentDir, 'opium.json');
 
 // Shipped defaults: every agent's runtime values, copied to the user's
 // opium.json on first run.

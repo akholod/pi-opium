@@ -9,10 +9,9 @@
 //     different models in parallel, then a synthesized report
 
 import { Type } from 'typebox';
-import {
-  CONFIG_DIR_NAME,
-  type ExtensionAPI,
-  type ExtensionContext,
+import type {
+  ExtensionAPI,
+  ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { humanWaitTracker, mountPanes, mountRunsView } from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
@@ -120,7 +119,7 @@ const branchOf = (
   ctx?.sessionManager?.getBranch();
 
 export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
-  const path = statePath(CONFIG_DIR_NAME);
+  const path = statePath();
   seedDefaults(path, deps.defaultsPath);
   // watch permission dialogs from the start so a run never misses one
   humanWaitTracker(pi.events);

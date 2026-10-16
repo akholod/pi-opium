@@ -4,10 +4,9 @@
 
 import { isPossiblyStuck } from 'pi-agent-runner';
 import { Type } from 'typebox';
-import {
-  CONFIG_DIR_NAME,
-  type ExtensionAPI,
-  type ExtensionContext,
+import type {
+  ExtensionAPI,
+  ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import {
   loadAgent,
@@ -402,7 +401,7 @@ export const agentCancel = async (
 // ---- Pi registration ----
 
 export const defaultLoadDef = (name: string): AgentDefinition => {
-  const { overrides } = readAgentOverrides(statePath(CONFIG_DIR_NAME));
+  const { overrides } = readAgentOverrides(statePath());
   return loadAgent(name, { overrides });
 };
 
