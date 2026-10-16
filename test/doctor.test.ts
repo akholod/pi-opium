@@ -577,6 +577,23 @@ test('/opium-doctor sends one message and starts no turn', async () => {
   await command.handler('--bogus', ctx);
   assert.equal(sent.length, 1);
   assert.deepEqual(notes.at(-1), ['usage: /opium-doctor [--live]', 'error']);
+
+  // `pi -p "/opium-doctor"` shows no messages: the report goes to stdout
+  const printed: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((chunk: string) => {
+    printed.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await command.handler('', { ...ctx, mode: 'tui' });
+    assert.equal(printed.length, 0);
+    await command.handler('', { ...ctx, mode: 'print' });
+  } finally {
+    process.stdout.write = write;
+  }
+  assert.equal(printed.length, 1);
+  assert.equal(printed[0], `${String(sent.at(-1)?.message.content)}\n`);
 });
 
 test('/opium-doctor is not registered in a subagent child', () => {

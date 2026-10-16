@@ -426,6 +426,11 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
           'info',
         );
         const report = await runDoctor({ live }, realDoctorDeps(ctx, path));
+        // `pi -p "/opium-doctor"` has no UI to show the message in: an
+        // install script or another agent reads the report from stdout
+        if (ctx.mode === 'print') {
+          process.stdout.write(`${formatDoctor(report)}\n`);
+        }
         pi.sendMessage(
           {
             customType: 'opium-doctor',
