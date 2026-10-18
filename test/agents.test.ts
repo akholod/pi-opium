@@ -591,4 +591,14 @@ test('mcp: errors for direct-less, uncached, disabled servers', () => {
     cachePath: paths.cachePath,
   });
   assert.deepEqual(missing, { tools: [], errors: [] });
+  // without the cache, servers the config does not define stay quiet
+  const noCache = { ...paths, cachePath: join(tmp(), 'none.json') };
+  assert.deepEqual(resolveMcpTools(['ghost', 'x'], noCache), {
+    tools: [],
+    errors: [],
+  });
+  assert.match(
+    resolveMcpTools(['nocache'], noCache).errors[0] ?? '',
+    /cannot read MCP metadata cache/,
+  );
 });

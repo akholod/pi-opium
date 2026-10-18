@@ -95,11 +95,14 @@ export const resolveMcpTools = (
   if (!existsSync(configPath)) return { tools, errors };
   const config = read(configPath, 'MCP config');
   if (typeof config === 'string') return { tools, errors: [config] };
-  const cache = read(cachePath, 'MCP metadata cache');
-  if (typeof cache === 'string') return { tools, errors: [cache] };
-
   const settings = isRecord(config.settings) ? config.settings : {};
   const defs = isRecord(config.mcpServers) ? config.mcpServers : {};
+  // the cache only matters for servers the config defines
+  if (!servers.some((server) => isRecord(defs[server]))) {
+    return { tools, errors };
+  }
+  const cache = read(cachePath, 'MCP metadata cache');
+  if (typeof cache === 'string') return { tools, errors: [cache] };
   const cached = isRecord(cache.servers) ? cache.servers : {};
   for (const server of servers) {
     const def = defs[server];
