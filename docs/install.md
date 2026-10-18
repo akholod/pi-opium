@@ -103,19 +103,18 @@ skip pi-lens, tell the user, and leave it out of step 5.
 ## 5. Configure
 
 Opium's whole config is `~/.pi/agent/opium.json` (in
-`$PI_CODING_AGENT_DIR` instead, when that is set). Opium creates it from
-its defaults the first time Pi loads it. Run this once so the file exists
-(it needs one signed-in provider from step 3; with none, Pi stops with
-`No API key found` before loading Opium):
+`$PI_CODING_AGENT_DIR` instead, when that is set).
 
-```sh
-pi -p --no-session "/opium-doctor"
-```
-
-If the file was there before you started, back it up first:
+If the file is already there, back it up before anything else:
 
 ```sh
 cp ~/.pi/agent/opium.json ~/.pi/agent/opium.json.bak-$(date +%Y%m%d-%H%M%S)
+```
+
+If it is not there, let Opium create it from its defaults:
+
+```sh
+pi -p --no-session "/opium-doctor"
 ```
 
 **Edit the file, do not rewrite it.** Opium never merges it with its
@@ -133,9 +132,13 @@ Put the models into a **preset**, beside `agents`:
    be three different models, from different providers when possible.
    Add `fallbackModels` from another provider where you can.
 3. Replace any model that `pi --list-models` does not show with the
-   closest one that it does, from the same row of the role table.
+   closest one that it does, from the same row of the role table. Copy
+   ids exactly: providers spell versions differently
+   (`anthropic/claude-sonnet-5-5`, `github-copilot/claude-sonnet-5.5`).
 4. An agent inside `agents` that already has a `model` beats the preset.
-   Ask the user whether to keep it or move it into the preset.
+   Ask the user whether to keep it. Recommended: keep the user's model,
+   but move it from `agents` into the preset, so `/opium-preset` can
+   switch it later.
 5. Full install: add `"extensions": ["pi-lens"]` to `agents.senior` and
    `agents.fixer`, keeping their other fields.
 
@@ -195,7 +198,9 @@ It checks the config, every agent's model and credentials, the council,
 skills, MCP servers and extensions, then pings each model. The last line
 must say `0 problems`. Fix every problem it lists (each line names its
 fix; more in [troubleshooting.md](troubleshooting.md)) and run it again.
-Warnings are fine to report and leave if the user agrees.
+`no credentials for <provider>` means the user still has to sign in
+(step 3): tell them, you cannot fix it yourself. Warnings are fine to
+report and leave if the user agrees.
 
 ## 7. Report
 
