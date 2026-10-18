@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+
+- **Fix:** `/opium-doctor` no longer warns about the default `codegraph`,
+  `context7` and `gh_grep` servers when a `pi-mcp-adapter` config exists
+  without its metadata cache.
+- Install guide: back up an existing `opium.json` first, keep a model
+  the user set by moving it into the preset, copy model ids exactly, and
+  tell the user when a provider still needs a sign-in.
+- README installs from npm (`pi install npm:pi-opium`).
+
 ## 0.4.0
 
 Install by asking your agent, see every agent at work.
