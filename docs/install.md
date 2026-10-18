@@ -82,7 +82,7 @@ Basic and full:
 pi install npm:pi-opium
 ```
 
-If npm does not have it yet, use `pi install git:github.com/akholod/pi-opium`.
+The latest unreleased version: `pi install git:github.com/akholod/pi-opium`.
 
 Full only, skipping what `pi list` already shows:
 

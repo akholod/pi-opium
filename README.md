@@ -45,7 +45,7 @@ checks the result.
 Or by hand:
 
 ```sh
-pi install git:github.com/akholod/pi-opium
+pi install npm:pi-opium
 ```
 
 Start Pi (or `/reload` a running session) and keep working as usual. Every agent starts on your
