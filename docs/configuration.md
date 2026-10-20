@@ -119,8 +119,8 @@ is used when it has the server enabled; otherwise the server is looked up in
 the `pi-mcp-adapter` config (`~/.config/mcp/mcp.json`) and that extension is
 loaded for the agent. A server found in neither is skipped without a warning.
 Council seats get no MCP servers. By default scout, fixer and senior ask
-for a server named `codegraph`, and researcher for `context7` and `gh_grep`
-(library docs and GitHub code search): if you have one, they use it; if not,
+for a server named `codegraph`, and researcher for `gh_grep` (GitHub code
+search; its library docs come from the `ctx7` CLI, not MCP): if you have one, they use it; if not,
 nothing happens.
 
 `extensions` loads installed Pi packages into the agent, on top of the ones it

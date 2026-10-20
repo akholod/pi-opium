@@ -93,7 +93,8 @@ it's done.
 ## Works better with
 
 - [pi-web-access](https://github.com/nicobailon/pi-web-access): lets researcher search the web and read pages.
-- `pi mcp add context7 --url https://mcp.context7.com/mcp` and `pi mcp add gh_grep --url https://mcp.grep.app`: up-to-date library docs and GitHub code search for researcher.
+- `npm i -g ctx7` (the Context7 CLI; or `npx ctx7@latest`, optional `ctx7 login` for higher limits): up-to-date library docs for researcher.
+- `pi mcp add gh_grep --url https://mcp.grep.app`: GitHub code search for researcher.
 - Any other MCP server added with `pi mcp add`: give it to an agent in `opium.json`, for example `"scout": { "mcpServers": ["my-index"] }`.
 
 ## Config

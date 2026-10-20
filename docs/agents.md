@@ -17,8 +17,9 @@ Background, thinking `low`, 10 minutes.
 
 **researcher** answers from outside the repo: library docs, API
 references, known bugs, "how do others solve this". It cites sources.
-Needs `pi-web-access` for the web; uses the Context7 and grep.app MCP
-servers when you have them. Reads only. Background, `low`, 15 minutes.
+Needs `pi-web-access` for the web; reads library docs with the Context7
+CLI (`ctx7`) and uses the grep.app MCP server when you have it. Its shell
+only runs `ctx7 library` and `ctx7 docs`; it cannot change files. Background, `low`, 15 minutes.
 
 **senior** is for decisions that are expensive to get wrong: architecture,
 a bug that survived two fixes, risky refactors, code review,

@@ -91,7 +91,7 @@ test('defaults/opium.json parses; every agent inherits the model', () => {
       scout: ['codegraph'],
       fixer: ['codegraph'],
       senior: ['codegraph'],
-      researcher: ['context7', 'gh_grep'],
+      researcher: ['gh_grep'],
     };
     assert.deepEqual(override.mcpServers, expected[name], name);
     assert.ok(override.thinking, name);
@@ -326,10 +326,7 @@ test('each docs/models.md preset on top of the defaults sets every model', () =>
     // a preset sets models only; the defaults' tuning stays in force
     assert.equal(agents.get('senior')?.thinking, 'xhigh', name);
     assert.equal(agents.get('fixer')?.background, true, name);
-    assert.deepEqual(agents.get('researcher')?.mcpServers, [
-      'context7',
-      'gh_grep',
-    ]);
+    assert.deepEqual(agents.get('researcher')?.mcpServers, ['gh_grep']);
   }
 });
 

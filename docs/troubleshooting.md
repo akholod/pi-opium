@@ -46,8 +46,14 @@ Install `pi-web-access` (`pi install npm:pi-web-access`) and restart Pi.
   check that it connects.
 - `pi-mcp-adapter` installed? It replaces Pi's built-in MCP, so add the
   server to its config (`~/.config/mcp/mcp.json`) instead.
-- `codegraph`, `context7` and `gh_grep` are optional: when you do not
-  have them, the agents work without them and the doctor stays quiet.
+- `codegraph` and `gh_grep` are optional: when you do not have them, the
+  agents work without them and the doctor stays quiet.
+
+## researcher cannot read library docs
+
+researcher reads library docs with the Context7 CLI, not an MCP server.
+Install it with `npm i -g ctx7` (or let it use `npx ctx7@latest`); run
+`ctx7 login` for higher rate limits.
 
 ## pi-lens is not installed
 

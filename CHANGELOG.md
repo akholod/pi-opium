@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **researcher reads library docs with the Context7 CLI** (`ctx7 library`,
+  then `ctx7 docs`) instead of the `context7` MCP server. Install with
+  `npm i -g ctx7` (or use `npx ctx7@latest`); `ctx7 login` raises the
+  limits. researcher gets `bash`, but a guard blocks every call that is
+  not a single `ctx7 library|docs` command. The default `mcpServers` for
+  researcher is now `gh_grep` only.
+
 ## 0.4.1
 
 - **Fix:** `/opium-doctor` no longer warns about the default `codegraph`,

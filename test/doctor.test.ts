@@ -221,18 +221,18 @@ test('MCP: builtin, adapter, missing codegraph, missing user server', async () =
   assert.equal(get('senior: MCP broken is configured but unusable'), 'warn');
 });
 
-test('MCP: the docs servers are optional like codegraph', async () => {
+test('MCP: the code search server is optional like codegraph', async () => {
   const report = await run({
     readOverrides: () => ({
       overrides: {
         ...healthyOverrides,
-        researcher: { mcpServers: ['context7', 'gh_grep'] },
+        researcher: { mcpServers: ['gh_grep'] },
       },
       errors: [],
     }),
   });
   const titles = section(report, 'MCP').map((c) => `${c.status} ${c.title}`);
-  for (const server of ['context7', 'gh_grep']) {
+  for (const server of ['gh_grep']) {
     assert.ok(
       titles.includes(
         `ok researcher: MCP ${server} not configured, agent works without it`,

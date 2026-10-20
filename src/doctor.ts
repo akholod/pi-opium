@@ -103,11 +103,7 @@ export const RUNNER_EXPORTS: readonly string[] = [
 const PING_TIMEOUT_MS = 30_000;
 const PING_CONCURRENCY = 4;
 // shipped defaults of scout, fixer, senior and researcher; absent is fine
-const OPTIONAL_MCP: ReadonlySet<string> = new Set([
-  'codegraph',
-  'context7',
-  'gh_grep',
-]);
+const OPTIONAL_MCP: ReadonlySet<string> = new Set(['codegraph', 'gh_grep']);
 
 const ok = (title: string, detail?: string): Check => ({
   status: 'ok',

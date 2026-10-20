@@ -34,7 +34,7 @@ Ask the user which install they want:
 - **Full (recommended):** Opium plus the tools that make the agents better:
   - `pi-web-access`: web search and page reading for researcher;
   - `pi-lens`: code navigation and diagnostics for senior and fixer;
-  - Context7: current library docs for researcher (MCP server);
+  - Context7 CLI (`ctx7`): current library docs for researcher;
   - grep.app: code search across GitHub for researcher (MCP server).
 - **Basic:** Opium only. researcher then has no web search.
 
@@ -89,12 +89,12 @@ Full only, skipping what `pi list` already shows:
 ```sh
 pi install npm:pi-web-access
 pi install npm:pi-lens
-pi mcp add context7 --url https://mcp.context7.com/mcp
+npm i -g ctx7
 pi mcp add gh_grep --url https://mcp.grep.app
 ```
 
 If `pi list` shows `pi-mcp-adapter`, it replaces Pi's built-in MCP: add
-the two servers to its config (`~/.config/mcp/mcp.json`) instead of using
+the `gh_grep` server to its config (`~/.config/mcp/mcp.json`) instead of using
 `pi mcp add`. Opium finds servers in either place.
 
 pi-lens needs Node 22.19 or newer (`node --version`). If Node is older,

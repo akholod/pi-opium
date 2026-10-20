@@ -170,6 +170,39 @@ export const readOnlyLsp: ExtensionFactory = (pi) => {
   });
 };
 
+// A single `ctx7 library|docs ...` (or via npx) with no shell syntax: no
+// separators, pipes, redirects, substitution, variables or newlines.
+export const CTX7_COMMAND = new RegExp(
+  '^\\s*(?:ctx7|npx(?:\\s+(?:-y|--yes))?\\s+ctx7(?:@[\\w.-]+)?)' +
+    '\\s+(?:library|docs)(?:\\s[^;&|`$<>\\r\\n]*)?\\s*$',
+);
+
+// researcher gets a shell only to read library docs through the Context7
+// CLI; everything else is refused.
+export const ctx7OnlyBash: ExtensionFactory = (pi) => {
+  pi.on('tool_call', (event) => {
+    const { command } = event.input as { command?: unknown };
+    const allowed =
+      event.toolName !== 'bash' ||
+      (typeof command === 'string' && CTX7_COMMAND.test(command));
+    return allowed
+      ? undefined
+      : {
+          block: true,
+          reason:
+            'bash is limited to a single `ctx7 library <name> "<query>"` ' +
+            'or `ctx7 docs <libraryId> "<query>"` call (optionally via ' +
+            '`npx -y ctx7@latest`), with no pipes, redirects, `;`, `&`, ' +
+            'substitution or variables',
+        };
+  });
+};
+
+// Agents whose bash tool is restricted, and how.
+const BASH_GUARDS: Readonly<Record<string, ExtensionFactory>> = {
+  researcher: ctx7OnlyBash,
+};
+
 export const buildLaunch = (
   def: AgentDefinition,
   ctx: LaunchContext,
@@ -270,11 +303,13 @@ export const buildLaunch = (
     !tools.includes('write');
   const lazy =
     tools !== undefined && packages.some((name) => LAZY_PACKAGES.has(name));
-  if (vision || readOnly || lazy) {
+  const bashGuard = tools?.includes('bash') ? BASH_GUARDS[def.name] : undefined;
+  if (vision || readOnly || lazy || bashGuard) {
     start.extensionFactories = [
       ...sessionGuards,
       ...(vision ? [vision.tool(def.name)] : []),
       ...(readOnly ? [readOnlyLsp] : []),
+      ...(bashGuard ? [bashGuard] : []),
       ...(lazy && tools ? [activateAllowed(tools)] : []),
     ];
   }
