@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2
 
 - **researcher reads library docs with the Context7 CLI** (`ctx7 library`,
   then `ctx7 docs`) instead of the `context7` MCP server. Install with
