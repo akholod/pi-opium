@@ -115,7 +115,7 @@ backup model or a time limit:
 }
 ```
 
-**Codemode.** scout, researcher and senior can use Pi's `codemode` tool:
+**Codemode.** researcher and senior can use Pi's `codemode` tool:
 one short script that runs several reads, searches or fetches in parallel
 and filters big output before the model sees it. The scripts share a few
 workers across your whole Pi process, so Opium sets

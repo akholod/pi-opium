@@ -61,7 +61,7 @@ where they agree and differ. Use it for high-stakes calls, or run
 | vision       |   ✓   |             |       |     |
 | councillors  |   ✓   |             |       |     |
 
-scout, researcher and senior also have Pi's `codemode` tool: a small
+researcher and senior also have Pi's `codemode` tool: a small
 script that calls their other tools in parallel and filters large output.
 It adds no new access; every call inside a script goes through the same
 permission rules and guards. See the README to turn it off for an agent.

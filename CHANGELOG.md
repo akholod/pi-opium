@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **scout, researcher and senior get Pi's `codemode` tool.** With it they
+- **researcher and senior get Pi's `codemode` tool.** With it they
   can run one small script that reads, searches or fetches several things in
   parallel and filters large output before it reaches the model. Their
   prompts say when to use it (3+ independent calls, or large output) and
@@ -10,7 +10,8 @@
   prompt mentions it for fanning out several `agent` / `agent_result` calls.
   Nested calls go through the same guards as direct ones. To turn it off for
   an agent, copy its file to `~/.pi/agent/agents/` and drop `codemode` from
-  `tools:` (see the README).
+  `tools:` (see the README). scout does not get it: in live A/B runs on its
+  model (gpt-6-luna) it almost never used codemode and gained nothing.
 - **Worker limit.** Codemode scripts share a pool of workers for the whole
   Pi process (default 2, the orchestrator and all specialists together).
   Pi reads `PI_CODEMODE_MAX_WORKERS` on every call, so Opium sets it to `6`

@@ -833,7 +833,7 @@ test('codemode limit below 4 warns with the fix, naming the agents', async () =>
     );
     assert.equal(found?.status, 'warn');
     assert.match(found?.title ?? '', new RegExp(`limit is ${limit}`));
-    assert.match(found?.title ?? '', /researcher, scout, senior/);
+    assert.match(found?.title ?? '', /researcher, senior/);
     assert.match(found?.fix ?? '', /export PI_CODEMODE_MAX_WORKERS=6/);
   }
 });
