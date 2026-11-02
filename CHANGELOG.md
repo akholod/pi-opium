@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 - **researcher and senior get Pi's `codemode` tool.** With it they
   can run one small script that reads, searches or fetches several things in
@@ -19,12 +19,6 @@
   including an invalid one, is never changed.
 - `/opium-doctor` reports the effective worker limit (Extensions section)
   and warns, with the fix, when it is below 4 while agents use codemode.
-- Needs a pi-agent-runner that loads the host's codemode extension in
-  children whose tool list includes `codemode`; without it the tool is
-  simply absent in the agents.
-
-## 0.5.0
-
 - **Subagents run on the host Pi.** The extension now hands the host's Pi
   SDK, TUI and `typebox` to pi-agent-runner (`bindHostRuntime`, requires
   pi-agent-runner 0.11), so specialists, the council and the vision agent
