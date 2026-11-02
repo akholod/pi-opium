@@ -49,7 +49,7 @@ test('every repo agent file loads', () => {
   const scout = get('scout');
   assert.deepEqual(scout.mcpServers, []);
   assert.deepEqual(scout.packages, []);
-  assert.deepEqual(scout.tools, ['read', 'grep', 'find', 'ls']);
+  assert.deepEqual(scout.tools, ['read', 'grep', 'find', 'ls', 'codemode']);
   assert.deepEqual(get('researcher').packages, ['pi-web-access']);
   assert.deepEqual(get('council').tools, []);
   const designer = get('designer');
@@ -598,4 +598,13 @@ test('mcp: errors for direct-less, uncached, disabled servers', () => {
     resolveMcpTools(['nocache'], noCache).errors[0] ?? '',
     /cannot read MCP metadata cache/,
   );
+});
+
+test('only scout, researcher and senior get the codemode tool', () => {
+  const { agents } = loadAgents({ dirs: [join(root, 'agents')] });
+  const withCodemode = [...agents.values()]
+    .filter((a) => a.tools?.includes('codemode'))
+    .map((a) => a.name)
+    .sort();
+  assert.deepEqual(withCodemode, ['researcher', 'scout', 'senior']);
 });

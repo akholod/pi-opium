@@ -40,6 +40,19 @@ not independent. Give them three different models; see
 
 Install `pi-web-access` (`pi install npm:pi-web-access`) and restart Pi.
 
+## codemode worker limit is low
+
+Codemode scripts run in a pool of workers shared by every session in the
+Pi process, the orchestrator and all specialists together. Pi's default is
+2, and a script waits up to 60 seconds for a free worker, then fails.
+Opium sets `PI_CODEMODE_MAX_WORKERS=6` itself when you have not; if the
+doctor still warns, your own value is lower than 4. Set a higher one before
+starting pi:
+
+```sh
+export PI_CODEMODE_MAX_WORKERS=6
+```
+
 ## An MCP server is not found
 
 - Add it with `pi mcp add <name> --url <url>` and run `pi mcp list` to

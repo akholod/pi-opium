@@ -115,6 +115,17 @@ backup model or a time limit:
 }
 ```
 
+**Codemode.** scout, researcher and senior can use Pi's `codemode` tool:
+one short script that runs several reads, searches or fetches in parallel
+and filters big output before the model sees it. The scripts share a few
+workers across your whole Pi process, so Opium sets
+`PI_CODEMODE_MAX_WORKERS=6` when it loads, unless you set it yourself (your
+value always wins; `/opium-doctor` warns below 4). To turn codemode off for
+an agent, copy its file from the package's `agents/` folder to
+`~/.pi/agent/agents/` and remove `codemode` from the `tools:` line; your
+copy replaces the packaged one. Codemode itself is a Pi setting
+(`codemode.mode`); Opium does not change it.
+
 **The council needs different models.** Three seats on the same model is
 one opinion said three times. Give `councillor-alpha`, `councillor-beta`
 and `councillor-gamma` different models; Opium warns you until you do.

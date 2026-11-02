@@ -87,6 +87,7 @@ const makeDeps = (over: Partial<DoctorDeps> = {}): DoctorDeps => ({
       warnings: [],
     },
   }),
+  codemodeWorkers: () => 6,
   ...over,
 });
 
@@ -822,4 +823,45 @@ test('the installed runner version is read from disk', () => {
     version: string;
   };
   assert.equal(installedRunnerVersion(), version);
+});
+
+test('codemode limit below 4 warns with the fix, naming the agents', async () => {
+  for (const limit of [2, 3]) {
+    const report = await run({ codemodeWorkers: () => limit });
+    const found = section(report, 'Extensions').find((c) =>
+      c.title.includes('codemode'),
+    );
+    assert.equal(found?.status, 'warn');
+    assert.match(found?.title ?? '', new RegExp(`limit is ${limit}`));
+    assert.match(found?.title ?? '', /researcher, scout, senior/);
+    assert.match(found?.fix ?? '', /export PI_CODEMODE_MAX_WORKERS=6/);
+  }
+});
+
+test('codemode limit of 4 or more is ok', async () => {
+  for (const limit of [4, 6]) {
+    const report = await run({ codemodeWorkers: () => limit });
+    const found = section(report, 'Extensions').find((c) =>
+      c.title.includes('codemode'),
+    );
+    assert.equal(found?.status, 'ok');
+    assert.match(found?.title ?? '', new RegExp(`limit is ${limit}`));
+  }
+});
+
+test('codemode check is quiet when no agent uses codemode', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opium-cm-'));
+  writeFileSync(
+    join(dir, 'x.md'),
+    '---\ndescription: x\ntools: read\n---\nb\n',
+  );
+  const report = await runDoctor(
+    { live: false, agentDirs: [dir] },
+    makeDeps({ codemodeWorkers: () => 2 }),
+  );
+  const found = section(report, 'Extensions').find((c) =>
+    c.title.includes('codemode'),
+  );
+  assert.equal(found?.status, 'ok');
+  assert.match(found?.title ?? '', /no agent uses it/);
 });

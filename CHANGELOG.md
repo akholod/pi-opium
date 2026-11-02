@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **scout, researcher and senior get Pi's `codemode` tool.** With it they
+  can run one small script that reads, searches or fetches several things in
+  parallel and filters large output before it reaches the model. Their
+  prompts say when to use it (3+ independent calls, or large output) and
+  when not to (single lookups, anything to read verbatim). The orchestrator
+  prompt mentions it for fanning out several `agent` / `agent_result` calls.
+  Nested calls go through the same guards as direct ones. To turn it off for
+  an agent, copy its file to `~/.pi/agent/agents/` and drop `codemode` from
+  `tools:` (see the README).
+- **Worker limit.** Codemode scripts share a pool of workers for the whole
+  Pi process (default 2, the orchestrator and all specialists together).
+  Pi reads `PI_CODEMODE_MAX_WORKERS` on every call, so Opium sets it to `6`
+  when the extension loads, only if you have not set it. A value you set,
+  including an invalid one, is never changed.
+- `/opium-doctor` reports the effective worker limit (Extensions section)
+  and warns, with the fix, when it is below 4 while agents use codemode.
+- Needs a pi-agent-runner that loads the host's codemode extension in
+  children whose tool list includes `codemode`; without it the tool is
+  simply absent in the agents.
+
 ## 0.5.0
 
 - **Subagents run on the host Pi.** The extension now hands the host's Pi

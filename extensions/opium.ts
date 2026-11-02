@@ -59,6 +59,7 @@ import {
   orchestratorAgents,
   supportsImages,
 } from '../src/vision.ts';
+import { defaultCodemodeWorkers } from '../src/codemode.ts';
 import { sessionGuards } from '../src/guards.ts';
 import { registerWorkflowCommands } from '../src/commands.ts';
 import { applyPresetCommand } from '../src/presets.ts';
@@ -591,5 +592,8 @@ export default function opiumExtension(pi: ExtensionAPI) {
   // code in node_modules would see a stale local copy. Hand the host's to the
   // runner before anything uses it.
   bindHostRuntime({ pi: hostPi, tui: hostTui, typebox: { Unsafe, Compile } });
+  // scout, researcher and senior use codemode, whose worker pool is shared
+  // by the whole process; the host reads this on each call
+  defaultCodemodeWorkers();
   createOpium(pi);
 }

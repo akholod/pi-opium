@@ -17,6 +17,12 @@ import {
   councillorAgent,
   sharedSeatModel,
 } from './council.ts';
+import {
+  CODEMODE_TOOL,
+  CODEMODE_WORKERS_ENV,
+  MIN_RECOMMENDED_WORKERS,
+  OPIUM_DEFAULT_WORKERS,
+} from './codemode.ts';
 import { VISION_AGENT } from './vision.ts';
 import type { McpTools } from './mcp.ts';
 
@@ -90,6 +96,8 @@ export interface DoctorDeps {
   // sources of the configured Pi packages (npm:name, paths, git urls)
   installedPackages(): string[];
   runner(): RunnerProbe;
+  // the codemode worker limit Pi will apply (env value or its default)
+  codemodeWorkers(): number;
   // one tiny request; rejects with the provider's error
   ping?(ref: string, signal: AbortSignal): Promise<void>;
   now?(): number;
@@ -395,6 +403,38 @@ const FIXES: Record<string, string> = {
     'researcher cannot search the web: pi install npm:pi-web-access',
 };
 
+// The codemode worker pool is shared by the whole Pi process.
+const codemodeCheck = (
+  agents: readonly AgentDefinition[],
+  deps: DoctorDeps,
+): Check => {
+  const limit = deps.codemodeWorkers();
+  const users = agents
+    .filter(
+      (a) =>
+        a.tools?.includes(CODEMODE_TOOL) ||
+        a.extraTools.includes(CODEMODE_TOOL),
+    )
+    .map((a) => a.name);
+  if (users.length === 0) {
+    return ok(`codemode: no agent uses it (worker limit ${limit})`);
+  }
+  const list = users.join(', ');
+  if (limit < MIN_RECOMMENDED_WORKERS) {
+    return {
+      status: 'warn',
+      title: `codemode worker limit is ${limit} (${list} use codemode)`,
+      detail:
+        'All sessions in this Pi process share these workers; scripts wait ' +
+        'up to 60 s for a free one, then fail.',
+      fix:
+        `export ${CODEMODE_WORKERS_ENV}=${OPIUM_DEFAULT_WORKERS} ` +
+        'before starting pi',
+    };
+  }
+  return ok(`codemode worker limit is ${limit} (${list} use codemode)`);
+};
+
 const checkExtensions = (
   agents: readonly AgentDefinition[],
   deps: DoctorDeps,
@@ -418,6 +458,7 @@ const checkExtensions = (
     }
   }
   if (wanted.size === 0) checks.push(ok('no agent needs extra packages'));
+  checks.push(codemodeCheck(agents, deps));
   return { name: 'Extensions', checks };
 };
 

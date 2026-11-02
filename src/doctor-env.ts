@@ -20,6 +20,7 @@ import type {
   RunnerProbe,
   RunnerRuntime,
 } from './doctor.ts';
+import { effectiveCodemodeWorkers } from './codemode.ts';
 import { discoverSkills, skillResolver } from './launch.ts';
 import { resolveMcpTools } from './mcp.ts';
 import { listPresets } from './presets.ts';
@@ -186,6 +187,7 @@ export const realDoctorDeps = (
         .map((pkg) => pkg.source);
     },
     runner: probeRunner,
+    codemodeWorkers: () => effectiveCodemodeWorkers(),
     ping: async (ref, signal) => {
       const model = findModel(registry, ref);
       if (!model) throw new Error('model not found');
