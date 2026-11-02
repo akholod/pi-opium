@@ -8,12 +8,20 @@
 //   - /council <question> and the `council` tool: three councillors on
 //     different models in parallel, then a synthesized report
 
-import { Type } from 'typebox';
+import * as hostPi from '@earendil-works/pi-coding-agent';
+import * as hostTui from '@earendil-works/pi-tui';
+import { Type, Unsafe } from 'typebox';
+import { Compile } from 'typebox/compile';
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import { humanWaitTracker, mountPanes, mountRunsView } from 'pi-agent-runner';
+import {
+  bindHostRuntime,
+  humanWaitTracker,
+  mountPanes,
+  mountRunsView,
+} from 'pi-agent-runner';
 import { buildOrchestratorPrompt } from '../src/prompt.ts';
 import {
   readPanesSettings,
@@ -579,5 +587,9 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
 };
 
 export default function opiumExtension(pi: ExtensionAPI) {
+  // The extension source sees the host's Pi modules (pi's loader aliases);
+  // code in node_modules would see a stale local copy. Hand the host's to the
+  // runner before anything uses it.
+  bindHostRuntime({ pi: hostPi, tui: hostTui, typebox: { Unsafe, Compile } });
   createOpium(pi);
 }

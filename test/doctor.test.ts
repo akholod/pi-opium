@@ -1,11 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as hostPi from '@earendil-works/pi-coding-agent';
+import * as hostTui from '@earendil-works/pi-tui';
+import { bindHostRuntime } from 'pi-agent-runner';
+import { Unsafe } from 'typebox';
+import { Compile } from 'typebox/compile';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { installedRunnerVersion } from '../src/doctor-env.ts';
+import {
+  installedRunnerVersion,
+  nativePiCandidateVersion,
+} from '../src/doctor-env.ts';
 import { createOpium } from '../extensions/opium.ts';
 import type { AgentOverrides } from '../src/agents.ts';
 import {
@@ -18,6 +32,7 @@ import {
   type DoctorDeps,
   type DoctorReport,
   type ModelInfo,
+  type RunnerProbe,
 } from '../src/doctor.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -61,7 +76,17 @@ const makeDeps = (over: Partial<DoctorDeps> = {}): DoctorDeps => ({
   builtinMcp: () => ({ disabled: false, servers: ['codegraph'] }),
   resolveMcp: () => ({ tools: [], errors: [] }),
   installedPackages: () => ['npm:pi-web-access', 'npm:pi-mcp-adapter@1.0.0'],
-  runner: () => ({ exports: runnerExports(), version: '0.9.0' }),
+  runner: () => ({
+    exports: runnerExports(),
+    version: '0.9.0',
+    hostVersion: '1.5.0',
+    runtime: {
+      bound: true,
+      source: 'injected',
+      hostVersion: '1.5.0',
+      warnings: [],
+    },
+  }),
   ...over,
 });
 
@@ -355,6 +380,172 @@ test('runner: every export is present', async () => {
   assert.match(check.title, /pi-agent-runner 0\.9\.0/);
 });
 
+const probeOf = (extra: Partial<RunnerProbe>): Partial<DoctorDeps> => ({
+  runner: () => ({ exports: runnerExports(), version: '0.11.0', ...extra }),
+});
+
+const runnerTitles = async (over: Partial<DoctorDeps>): Promise<string[]> =>
+  section(await run(over), 'Runner').map((c) => c.title);
+
+test('runner: a bound host is reported with its version and source', async () => {
+  const report = await run();
+  assert.deepEqual(problems(report, 'warn'), []);
+  assert.deepEqual(
+    section(report, 'Runner').map((c) => c.title),
+    [
+      'pi-agent-runner 0.9.0 provides every export Opium uses',
+      'Host Pi: 1.5.0',
+      'Runner runtime: 1.5.0 — injected host',
+    ],
+  );
+});
+
+test('runner: an unbound runtime fails with the restart hint', async () => {
+  const report = await run(
+    probeOf({ hostVersion: '1.5.0', runtime: { bound: false } }),
+  );
+  const check = section(report, 'Runner').find((c) =>
+    c.title.startsWith('Runner runtime'),
+  );
+  assert.equal(check?.status, 'fail');
+  assert.equal(check?.title, 'Runner runtime: not bound');
+  assert.match(check?.fix ?? '', /restart Pi/);
+});
+
+test('runner: a runtime bound to another Pi than the host fails', async () => {
+  const report = await run(
+    probeOf({
+      hostVersion: '1.5.0',
+      runtime: {
+        bound: true,
+        source: 'injected',
+        hostVersion: '1.1.0',
+        warnings: [],
+      },
+    }),
+  );
+  const check = section(report, 'Runner').find((c) =>
+    c.title.startsWith('Runner runtime'),
+  );
+  assert.equal(check?.status, 'fail');
+  assert.match(check?.detail ?? '', /different Pi than the host 1\.5\.0/);
+});
+
+test('runner: binding warnings are shown as warnings', async () => {
+  const report = await run(
+    probeOf({
+      hostVersion: '1.9.0',
+      runtime: {
+        bound: true,
+        source: 'injected',
+        hostVersion: '1.9.0',
+        warnings: ['Pi 1.9.0 is newer than the tested 1.1.0, 1.5.0'],
+      },
+    }),
+  );
+  assert.deepEqual(problems(report, 'warn'), [
+    'Runner runtime: Pi 1.9.0 is newer than the tested 1.1.0, 1.5.0 ',
+  ]);
+});
+
+test('runner: a legacy runner without the diagnostic is unverified', async () => {
+  const report = await run(probeOf({ hostVersion: '1.5.0' }));
+  const check = section(report, 'Runner').find((c) =>
+    c.title.startsWith('Runner runtime'),
+  );
+  assert.equal(check?.status, 'warn');
+  assert.equal(check?.title, 'Runner runtime: unverified');
+  assert.match(check?.detail ?? '', /getHostRuntimeInfo/);
+});
+
+test('runner: a bound runtime reports the candidate as not used', async () => {
+  const bound = {
+    hostVersion: '1.5.0',
+    runtime: {
+      bound: true,
+      source: 'injected',
+      hostVersion: '1.5.0',
+      warnings: [],
+    },
+  } as const;
+  const titles = await runnerTitles(
+    probeOf({ ...bound, nativeCandidate: '1.1.0' }),
+  );
+  assert.ok(
+    titles.includes('Native Pi candidate: 1.1.0 — installed, not used'),
+  );
+  const without = await run(probeOf(bound));
+  assert.deepEqual(problems(without, 'warn'), []);
+  assert.ok(
+    !section(without, 'Runner').some((c) => c.title.startsWith('Native')),
+  );
+});
+
+test('runner: the candidate is unverified for unbound and legacy runners', async () => {
+  const runtimes = [{ bound: false }, undefined] as const;
+  for (const runtime of runtimes) {
+    const titles = await runnerTitles(
+      probeOf({
+        hostVersion: '1.5.0',
+        nativeCandidate: '1.1.0',
+        ...(runtime ? { runtime } : {}),
+      }),
+    );
+    assert.ok(
+      titles.includes(
+        'Native Pi candidate: 1.1.0 — installed; runtime usage unverified',
+      ),
+    );
+    assert.ok(!titles.some((t) => t.includes('installed, not used')));
+  }
+});
+
+test('runner: an unbound runtime still reports when builtin MCP throws', async () => {
+  const report = await run({
+    runner: () => ({
+      exports: runnerExports(),
+      version: '0.11.0',
+      hostVersion: '1.5.0',
+      runtime: { bound: false },
+    }),
+    builtinMcp: () => {
+      throw new Error('PI_AGENT_RUNNER_HOST_UNBOUND: bind first');
+    },
+  });
+  const mcp = section(report, 'MCP')[0];
+  assert.equal(mcp.status, 'warn');
+  assert.equal(mcp.title, 'builtin MCP could not be checked');
+  assert.match(mcp.detail ?? '', /HOST_UNBOUND/);
+  const titles = section(report, 'Runner').map((c) => c.title);
+  assert.ok(titles.includes('Runner runtime: not bound'));
+  assert.match(formatDoctor(report), /Runner runtime: not bound/);
+});
+
+test('runner: a throwing probe fails the Runner section only', async () => {
+  const report = await run({
+    runner: () => {
+      throw new Error('boom');
+    },
+  });
+  const [check] = section(report, 'Runner');
+  assert.equal(check.status, 'fail');
+  assert.equal(check.detail, 'boom');
+});
+
+test('the native Pi candidate is found by walking up from the runner', () => {
+  const base = mkdtempSync(join(tmpdir(), 'opium-native-'));
+  const runnerDir = join(base, 'node_modules', 'pi-agent-runner');
+  mkdirSync(runnerDir, { recursive: true });
+  assert.equal(nativePiCandidateVersion(runnerDir), undefined);
+  const pi = join(base, 'node_modules', '@earendil-works', 'pi-coding-agent');
+  mkdirSync(pi, { recursive: true });
+  // a manifest that does not parse is not a candidate
+  writeFileSync(join(pi, 'package.json'), '{');
+  assert.equal(nativePiCandidateVersion(runnerDir), undefined);
+  writeFileSync(join(pi, 'package.json'), JSON.stringify({ version: '1.1.0' }));
+  assert.equal(nativePiCandidateVersion(runnerDir), '1.1.0');
+});
+
 test('RUNNER_EXPORTS lists every value Opium imports from the runner', () => {
   const files = [
     ...readdirSync(join(root, 'src')).map((f) => join(root, 'src', f)),
@@ -535,6 +726,8 @@ interface Command {
 }
 
 test('/opium-doctor sends one message and starts no turn', async () => {
+  // the real doctor deps call into the runner, which needs the host bound
+  bindHostRuntime({ pi: hostPi, tui: hostTui, typebox: { Unsafe, Compile } });
   const home = mkdtempSync(join(tmpdir(), 'opium-doctor-'));
   const defaults = join(home, 'defaults.json');
   writeFileSync(defaults, '{"orchestrator":true,"agents":{}}\n');

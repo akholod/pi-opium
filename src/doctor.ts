@@ -47,11 +47,29 @@ export interface ModelInfo {
   authenticated: boolean;
 }
 
+// What the runner's getHostRuntimeInfo() reports; mirrors its HostRuntimeInfo.
+export type RunnerRuntime =
+  | { bound: false }
+  | {
+      bound: true;
+      source: string;
+      hostVersion: string;
+      warnings: readonly string[];
+    };
+
 export interface RunnerProbe {
   // the module loaded in this process
   exports: Record<string, unknown>;
   // version installed on disk
   version?: string;
+  // the Pi version the extension source sees (the host)
+  hostVersion?: string;
+  // the runner's own report; undefined when it has no getHostRuntimeInfo
+  // (a legacy runner)
+  runtime?: RunnerRuntime;
+  // version of a Pi package installed next to the runner, read from its
+  // manifest only (never imported); undefined when there is none
+  nativeCandidate?: string;
 }
 
 export interface DoctorDeps {
@@ -89,6 +107,7 @@ export interface DoctorInput {
 // Every value Opium imports from pi-agent-runner (test/doctor.test.ts keeps
 // this in step with the source).
 export const RUNNER_EXPORTS: readonly string[] = [
+  'bindHostRuntime',
   'builtinMcpDisabled',
   'builtinMcpServers',
   'humanWaitTracker',
@@ -301,14 +320,28 @@ const checkMcp = (
   deps: DoctorDeps,
 ): Section => {
   const withMcp = agents.filter((a) => a.mcpServers.length > 0);
-  const { disabled, servers } = deps.builtinMcp();
-  const checks: Check[] = [
-    ok(
-      disabled
-        ? 'builtin MCP is disabled (-builtin:mcp)'
-        : `builtin MCP is enabled (${servers.join(', ') || 'no servers'})`,
-    ),
-  ];
+  // the runner's helpers need the host binding; without it the section
+  // reports the gap (the Runner section carries the actual failure)
+  let disabled = false;
+  let servers: string[] = [];
+  const checks: Check[] = [];
+  try {
+    ({ disabled, servers } = deps.builtinMcp());
+    checks.push(
+      ok(
+        disabled
+          ? 'builtin MCP is disabled (-builtin:mcp)'
+          : `builtin MCP is enabled (${servers.join(', ') || 'no servers'})`,
+      ),
+    );
+  } catch (error) {
+    checks.push({
+      status: 'warn',
+      title: 'builtin MCP could not be checked',
+      detail: errorText(error),
+      fix: 'see the Runner section',
+    });
+  }
   const known = new Set(disabled ? [] : servers);
   for (const agent of withMcp) {
     for (const server of agent.mcpServers) {
@@ -426,8 +459,74 @@ const checkImages = (agents: readonly AgentDefinition[], deps: DoctorDeps) => {
 
 // ---- runner ----
 
+// Which Pi the runner's children run on: the host's when bound.
+const runtimeChecks = (probe: RunnerProbe): Check[] => {
+  const { hostVersion, runtime, nativeCandidate } = probe;
+  const checks: Check[] = [];
+  if (hostVersion) checks.push(ok(`Host Pi: ${hostVersion}`));
+  if (!runtime) {
+    checks.push({
+      status: 'warn',
+      title: 'Runner runtime: unverified',
+      detail: 'pi-agent-runner has no getHostRuntimeInfo (a legacy runner)',
+      fix: 'update pi-agent-runner to 0.11 or later and restart Pi',
+    });
+  } else if (!runtime.bound) {
+    checks.push({
+      status: 'fail',
+      title: 'Runner runtime: not bound',
+      detail: 'subagents cannot start without the host Pi runtime',
+      fix: 'restart Pi (a /reload is not enough)',
+    });
+  } else {
+    const source =
+      runtime.source === 'injected' ? 'injected host' : runtime.source;
+    const mismatch = hostVersion && hostVersion !== runtime.hostVersion;
+    checks.push(
+      mismatch
+        ? {
+            status: 'fail',
+            title: `Runner runtime: ${runtime.hostVersion} — ${source}`,
+            detail: `bound to a different Pi than the host ${hostVersion}`,
+            fix: 'restart Pi',
+          }
+        : ok(`Runner runtime: ${runtime.hostVersion} — ${source}`),
+    );
+    for (const warning of runtime.warnings) {
+      checks.push({ status: 'warn', title: `Runner runtime: ${warning}` });
+    }
+  }
+  if (nativeCandidate) {
+    // only a valid injected binding proves the candidate is not the runtime
+    const verdict =
+      runtime?.bound &&
+      runtime.source === 'injected' &&
+      (!hostVersion || hostVersion === runtime.hostVersion)
+        ? 'installed, not used'
+        : 'installed; runtime usage unverified';
+    checks.push(ok(`Native Pi candidate: ${nativeCandidate} — ${verdict}`));
+  }
+  return checks;
+};
+
 const checkRunner = (deps: DoctorDeps): Section => {
-  const { exports, version } = deps.runner();
+  let probe: RunnerProbe;
+  try {
+    probe = deps.runner();
+  } catch (error) {
+    return {
+      name: 'Runner',
+      checks: [
+        {
+          status: 'fail',
+          title: 'pi-agent-runner could not be probed',
+          detail: errorText(error),
+          fix: 'restart Pi (a /reload is not enough)',
+        },
+      ],
+    };
+  }
+  const { exports, version } = probe;
   const missing = RUNNER_EXPORTS.filter(
     (n) => typeof exports[n] !== 'function',
   );
@@ -443,7 +542,7 @@ const checkRunner = (deps: DoctorDeps): Section => {
           fix: 'restart Pi (a /reload is not enough)',
         }
       : ok(`pi-agent-runner ${shown} provides every export Opium uses`);
-  return { name: 'Runner', checks: [check] };
+  return { name: 'Runner', checks: [check, ...runtimeChecks(probe)] };
 };
 
 // ---- orchestrator ----

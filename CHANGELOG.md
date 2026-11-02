@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+- **Subagents run on the host Pi.** The extension now hands the host's Pi
+  SDK, TUI and `typebox` to pi-agent-runner (`bindHostRuntime`, requires
+  pi-agent-runner 0.11), so specialists, the council and the vision agent
+  use the Pi version that is running instead of a stale copy installed next
+  to the runner.
+- `/opium-doctor` reports the host Pi version, whether the runner is bound to
+  it (and any binding warnings), and the Pi package found next to the runner,
+  if any (read from its manifest, never loaded). A runner without the
+  diagnostic shows as "runtime unverified".
+- All host packages (`pi-ai`, `pi-coding-agent`, `pi-tui`, `typebox`) are
+  optional peer dependencies; the development baseline is Pi 1.5.
+
 ## 0.4.2
 
 - **researcher reads library docs with the Context7 CLI** (`ctx7 library`,

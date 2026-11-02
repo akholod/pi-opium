@@ -2,18 +2,24 @@
 // the runner module loaded in this process.
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DefaultPackageManager,
   SettingsManager,
+  VERSION,
   getAgentDir,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import * as runner from 'pi-agent-runner';
 import { readAgentOverrides } from './agents.ts';
-import type { DoctorDeps, ModelInfo, RunnerProbe } from './doctor.ts';
+import type {
+  DoctorDeps,
+  ModelInfo,
+  RunnerProbe,
+  RunnerRuntime,
+} from './doctor.ts';
 import { discoverSkills, skillResolver } from './launch.ts';
 import { resolveMcpTools } from './mcp.ts';
 import { listPresets } from './presets.ts';
@@ -42,40 +48,96 @@ const findModel = (registry: Registry, ref: string) => {
     : undefined;
 };
 
-// The version of the pi-agent-runner on disk, found from where Opium is
-// installed (its package.json is not in the package's exports).
-export const installedRunnerVersion = (): string | undefined => {
-  let dir = dirname(fileURLToPath(import.meta.url));
+const PI_PACKAGE = '@earendil-works/pi-coding-agent';
+
+const manifestVersion = (file: string): string | undefined => {
   let version: string | undefined;
-  let done = false;
-  while (!done) {
-    const file = join(dir, 'node_modules', 'pi-agent-runner', 'package.json');
-    if (existsSync(file)) {
-      try {
-        const json = JSON.parse(readFileSync(file, 'utf8')) as {
-          version?: unknown;
-        };
-        if (typeof json.version === 'string') version = json.version;
-      } catch {
-        // unreadable: the version stays unknown
-      }
-      done = true;
-    } else {
-      const parent = dirname(dir);
-      done = parent === dir;
-      dir = parent;
-    }
+  try {
+    const json = JSON.parse(readFileSync(file, 'utf8')) as {
+      version?: unknown;
+    };
+    if (typeof json.version === 'string') version = json.version;
+  } catch {
+    // unreadable: the version stays unknown
   }
   return version;
 };
 
+const realPath = (path: string): string | undefined => {
+  let real: string | undefined;
+  try {
+    real = realpathSync(path);
+  } catch {
+    // gone: nothing to look beside
+  }
+  return real;
+};
+
+// First hit of `find` in `start` and then each parent directory.
+const walkUp = (
+  start: string,
+  find: (dir: string) => string | undefined,
+): string | undefined => {
+  let dir = start;
+  let result: string | undefined;
+  let done = false;
+  while (!done) {
+    result = find(dir);
+    const parent = dirname(dir);
+    done = result !== undefined || parent === dir;
+    dir = parent;
+  }
+  return result;
+};
+
+// The directory of the pi-agent-runner on disk, found from where Opium is
+// installed (its package.json is not in the package's exports).
+const installedRunnerDir = (): string | undefined =>
+  walkUp(dirname(fileURLToPath(import.meta.url)), (dir) => {
+    const found = join(dir, 'node_modules', 'pi-agent-runner');
+    return existsSync(join(found, 'package.json')) ? found : undefined;
+  });
+
+export const installedRunnerVersion = (): string | undefined => {
+  const dir = installedRunnerDir();
+  return dir ? manifestVersion(join(dir, 'package.json')) : undefined;
+};
+
+// The Pi a plain Node resolution from the runner's location would find (the
+// copy the runner used before it was bound to the host). Reads the manifest
+// only; the package is never imported.
+export const nativePiCandidateVersion = (
+  runnerDir = installedRunnerDir(),
+): string | undefined => {
+  const start = runnerDir ? realPath(runnerDir) : undefined;
+  const manifest = start
+    ? walkUp(start, (dir) => {
+        const file = join(dir, 'node_modules', PI_PACKAGE, 'package.json');
+        return existsSync(file) ? file : undefined;
+      })
+    : undefined;
+  return manifest ? manifestVersion(manifest) : undefined;
+};
+
+// A runner older than 0.11 has no getHostRuntimeInfo: the runtime stays
+// unverified.
+const runnerRuntime = (): RunnerRuntime | undefined => {
+  const read = (runner as { getHostRuntimeInfo?: unknown }).getHostRuntimeInfo;
+  return typeof read === 'function' ? runner.getHostRuntimeInfo() : undefined;
+};
+
 const probeRunner = (): RunnerProbe => {
   const version = installedRunnerVersion();
+  const runtime = runnerRuntime();
+  const candidate = nativePiCandidateVersion();
   return {
     // SAFETY: a module namespace object is a plain record of its exports;
     // the probe only reads keys and checks typeof, never calls through it.
     exports: runner as unknown as Record<string, unknown>,
     ...(version === undefined ? {} : { version }),
+    hostVersion: VERSION,
+    ...(runtime === undefined ? {} : { runtime }),
+    ...(candidate === undefined ? {} : { nativeCandidate: candidate }),
   };
 };
 
