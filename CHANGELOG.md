@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - Bundled skills `write-tests` and `review-tests` (vendored from mtga, MIT;
   refresh with `npm run sync:skills`); tester and reviewer load them by
