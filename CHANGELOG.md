@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- README: a reviewer example, senior's narrower role, and how to add your
+  own agents with `advertise: true`.
+
 ## 0.6.0
 
 - Bundled skills `write-tests` and `review-tests` (vendored from mtga, MIT;

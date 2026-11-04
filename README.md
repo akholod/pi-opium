@@ -62,6 +62,8 @@ Just ask:
 - "Find where auth tokens are refreshed" → scout searches, you keep going.
 - "Fix the failing tests in `api/`" → fixer works in the background and
   reports back.
+- "Review this change before I merge it" → reviewer checks the code and
+  whether its tests would catch a bug.
 - "Get a second opinion on this migration plan" → the council answers.
 
 While agents run, a list above the editor shows what each one is doing.
@@ -70,18 +72,18 @@ it's done.
 
 ## The team
 
-| Agent        | Does                                                   |
-| ------------ | ------------------------------------------------------ |
-| scout        | finds files and code, fast                             |
-| researcher   | reads docs and the web, answers with sources           |
-| senior       | architecture, hard bugs, design review, simplification |
-| designer     | UI and UX, built and polished                          |
-| fixer        | writes the code for a clear, bounded task              |
-| reviewer     | fast review of a finished change: code and its tests   |
-| tester       | writes tests that would catch a bug                    |
-| fast-generic | git, commits, tests, builds                            |
-| vision       | images for models that can't see them                  |
-| council      | three models answer, one sums up where they land       |
+| Agent        | Does                                                 |
+| ------------ | ---------------------------------------------------- |
+| scout        | finds files and code, fast                           |
+| researcher   | reads docs and the web, answers with sources         |
+| senior       | architecture, design, stuck bugs, simplification     |
+| designer     | UI and UX, built and polished                        |
+| fixer        | writes the code for a clear, bounded task            |
+| reviewer     | fast review of a finished change: code and its tests |
+| tester       | writes tests that would catch a bug                  |
+| fast-generic | git, commits, tests, builds                          |
+| vision       | images for models that can't see them                |
+| council      | three models answer, one sums up where they land     |
 
 tester and reviewer come with two bundled skills, `write-tests` and
 `review-tests`.
@@ -130,6 +132,11 @@ an agent, copy its file from the package's `agents/` folder to
 `~/.pi/agent/agents/` and remove `codemode` from the `tools:` line; your
 copy replaces the packaged one. Codemode itself is a Pi setting
 (`codemode.mode`); Opium does not change it.
+
+**Your own agents.** Put a new `.md` file in `~/.pi/agent/agents/` with
+`advertise: true` in its frontmatter, and the lead sees it in its team
+list with its `description` and can hand it work. See
+[docs/agents.md](https://github.com/akholod/pi-opium/blob/main/docs/agents.md).
 
 **The council needs different models.** Three seats on the same model is
 one opinion said three times. Give `councillor-alpha`, `councillor-beta`
