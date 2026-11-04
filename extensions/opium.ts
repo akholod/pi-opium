@@ -22,7 +22,7 @@ import {
   mountPanes,
   mountRunsView,
 } from 'pi-agent-runner';
-import { buildOrchestratorPrompt } from '../src/prompt.ts';
+import { BUILTIN_AGENT_NAMES, buildOrchestratorPrompt } from '../src/prompt.ts';
 import {
   readPanesSettings,
   readState,
@@ -31,7 +31,7 @@ import {
   statePath,
   writeState,
 } from '../src/state.ts';
-import { readAgentOverrides } from '../src/agents.ts';
+import { loadAgents, readAgentOverrides } from '../src/agents.ts';
 import {
   RunRegistry,
   defaultStarter,
@@ -144,7 +144,13 @@ export const createOpium = (pi: ExtensionAPI, deps: OpiumDeps = {}): void => {
     const key = available.join(',');
     let prompt = prompts.get(key);
     if (prompt === undefined) {
-      prompt = buildOrchestratorPrompt({ available });
+      const custom = [...loadAgents().agents.values()].filter(
+        (agent) =>
+          agent.advertise &&
+          available.includes(agent.name) &&
+          !BUILTIN_AGENT_NAMES.includes(agent.name),
+      );
+      prompt = buildOrchestratorPrompt({ available, custom });
       prompts.set(key, prompt);
     }
     return prompt;

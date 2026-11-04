@@ -118,7 +118,7 @@ thinking inherited, no timeouts, `background` false, `permissionAsks`
 is used when it has the server enabled; otherwise the server is looked up in
 the `pi-mcp-adapter` config (`~/.config/mcp/mcp.json`) and that extension is
 loaded for the agent. A server found in neither is skipped without a warning.
-Council seats get no MCP servers. By default scout, fixer and senior ask
+Council seats get no MCP servers. By default scout, fixer, senior, reviewer and tester ask
 for a server named `codegraph`, and researcher for `gh_grep` (GitHub code
 search; its library docs come from the `ctx7` CLI, not MCP): if you have one, they use it; if not,
 nothing happens.

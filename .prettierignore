@@ -4,3 +4,6 @@ agents/
 .pi/
 node_modules/
 package-lock.json
+# Vendored from mtga; must stay byte-identical (npm run sync:skills).
+skills/write-tests/
+skills/review-tests/

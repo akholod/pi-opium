@@ -13,7 +13,8 @@ fits it. Back to the [README](../README.md).
 | councillor-alpha/beta/gamma     | three different strong models               |
 | council (sums up the seats)     | a strong model                              |
 | designer                        | strong, good at UI, sees images             |
-| fixer                           | a good coding model                         |
+| fixer, tester                   | a good coding model                         |
+| reviewer                        | a model other than fixer's, e.g. senior's   |
 | scout, researcher, fast-generic | fast and cheap                              |
 | vision                          | cheap and sees images                       |
 
@@ -56,6 +57,8 @@ Lead: `/model anthropic/claude-opus-5-5`.
   "senior": { "model": "anthropic/claude-fable-5-1" },
   "designer": { "model": "anthropic/claude-opus-5-5" },
   "fixer": { "model": "anthropic/claude-sonnet-5-5" },
+  "reviewer": { "model": "anthropic/claude-fable-5-1" },
+  "tester": { "model": "anthropic/claude-sonnet-5-5" },
   "scout": { "model": "anthropic/claude-haiku-5-5" },
   "researcher": { "model": "anthropic/claude-haiku-5-5" },
   "fast-generic": { "model": "anthropic/claude-haiku-5-5" },
@@ -76,6 +79,8 @@ Lead: `/model openai-codex/gpt-6.1-sol`.
   "senior": { "model": "openai-codex/gpt-6-astra" },
   "designer": { "model": "openai-codex/gpt-6.1-sol" },
   "fixer": { "model": "openai-codex/gpt-6-sol" },
+  "reviewer": { "model": "openai-codex/gpt-6-astra" },
+  "tester": { "model": "openai-codex/gpt-6-sol" },
   "scout": { "model": "openai-codex/gpt-6-luna" },
   "researcher": { "model": "openai-codex/gpt-6-luna" },
   "fast-generic": { "model": "openai-codex/gpt-6-luna" },
@@ -97,6 +102,8 @@ different ones. Lead: `/model github-copilot/claude-opus-5.5`.
   "senior": { "model": "github-copilot/gpt-6-astra" },
   "designer": { "model": "github-copilot/claude-opus-5.5" },
   "fixer": { "model": "github-copilot/claude-sonnet-5.5" },
+  "reviewer": { "model": "github-copilot/gpt-6-astra" },
+  "tester": { "model": "github-copilot/claude-sonnet-5.5" },
   "scout": { "model": "github-copilot/gpt-6-luna" },
   "researcher": { "model": "github-copilot/gpt-6-luna" },
   "fast-generic": { "model": "github-copilot/gpt-6-luna" },
@@ -119,6 +126,8 @@ Opium gives senior a vision tool for that. Lead:
   "senior": { "model": "opencode-go/deepseek-v4-pro" },
   "designer": { "model": "opencode-go/kimi-k3" },
   "fixer": { "model": "opencode-go/kimi-k2.7-code" },
+  "reviewer": { "model": "opencode-go/deepseek-v4-pro" },
+  "tester": { "model": "opencode-go/kimi-k2.7-code" },
   "scout": { "model": "opencode-go/deepseek-v4.1-flash" },
   "researcher": { "model": "opencode-go/deepseek-v4.1-flash" },
   "fast-generic": { "model": "opencode-go/deepseek-v4.1-flash" },
@@ -140,6 +149,8 @@ Pi reaches Gemini with a `GEMINI_API_KEY`. Lead:
   "senior": { "model": "google/gemini-4-argon" },
   "designer": { "model": "google/gemini-4-argon" },
   "fixer": { "model": "google/gemini-4-argon" },
+  "reviewer": { "model": "google/gemini-4-argon" },
+  "tester": { "model": "google/gemini-4-argon" },
   "scout": { "model": "google/gemini-3.8-flash" },
   "researcher": { "model": "google/gemini-3.8-flash" },
   "fast-generic": { "model": "google/gemini-3.8-flash" },
@@ -169,6 +180,14 @@ back to another provider when its own is down or out of quota. Lead:
     "fallbackModels": ["openai-codex/gpt-6.1-sol"]
   },
   "fixer": {
+    "model": "anthropic/claude-sonnet-5-5",
+    "fallbackModels": ["openai-codex/gpt-6-sol"]
+  },
+  "reviewer": {
+    "model": "anthropic/claude-fable-5-1",
+    "fallbackModels": ["openai-codex/gpt-6-astra"]
+  },
+  "tester": {
     "model": "anthropic/claude-sonnet-5-5",
     "fallbackModels": ["openai-codex/gpt-6-sol"]
   },

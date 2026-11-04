@@ -47,6 +47,7 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "lint": "eslint . && prettier --check \"**/*.ts\" \"**/*.json\" \"**/*.md\"",
     "fix": "eslint . --fix && prettier --write \"**/*.ts\" \"**/*.json\" \"**/*.md\"",
+    "sync:skills": "node scripts/sync-skills.mjs",
     "dev": "pi -e .",
     "test:live": "node --experimental-strip-types test/acceptance.live.ts",
     "prepublishOnly": "npm run typecheck && npm run lint && npm test"

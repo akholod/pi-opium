@@ -195,11 +195,15 @@ test('skills are appended; a missing one warns', () => {
   const { start, warnings } = buildLaunch(def, {
     ...base,
     resolveSkill: (name) =>
-      name === 'one' ? { path: '/s/one', content: '\n  Do one.\n' } : undefined,
+      name === 'one'
+        ? { path: '/s/one/SKILL.md', content: '\n  Do one.\n' }
+        : undefined,
   });
   assert.equal(
     start.systemPrompt,
-    'PROMPT\n\n<skill name="one">\nDo one.\n</skill>',
+    'PROMPT\n\n<skill name="one" path="/s/one/SKILL.md">\n' +
+      'Relative paths in this skill resolve against /s/one.\n' +
+      'Do one.\n</skill>',
   );
   assert.deepEqual(warnings, ['skill gone not found']);
 });

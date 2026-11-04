@@ -13,6 +13,8 @@ export interface OrchestratorPromptOptions {
   // callable agents; when set, roster entries for other agents are dropped
   // (council is a tool, not an agent, and always stays)
   available?: readonly string[];
+  // user agents (advertised, not built-in) to list after the built-ins
+  custom?: readonly { name: string; description: string }[];
 }
 
 const AGENTS: Record<string, string> = {
@@ -32,14 +34,24 @@ const AGENTS: Record<string, string> = {
 - **Rule of thumb:** "How does this library work?" -> researcher. "How does programming work?" -> answer directly. "How do others solve or work around this tricky issue?" -> researcher.`,
 
   senior: `senior
-- Lane: architecture, risk, debugging strategy and review (read-only, background)
-- Role: strategic advisor for high-stakes decisions and persistent problems, code reviewer
+- Lane: architecture, risk and debugging strategy (read-only, background)
+- Role: strategic advisor for high-stakes decisions and persistent problems. Answers "how should this be done, why is it broken, is it more complex than it needs to be?", not "is this diff correct?"
 - Stats: 5x better decision maker, problem solver and investigator than you, 0.8x speed, same cost
-- Capabilities: deep architectural reasoning, system-level trade-offs, complex debugging, code review, simplification, maintainability review
-- **Delegate when:** major architectural decisions with long-term impact • problems persisting after 2+ fix attempts • high-risk multi-system refactors • costly trade-offs • complex debugging with unclear root cause • security/scalability/data integrity decisions • genuinely uncertain and the cost of a wrong choice is high • code needs simplification or YAGNI scrutiny
-- **Review use:** senior is an escalation, not a default verification step. Request an independent senior review only when its analysis is expected to materially reduce risk or uncertainty.
-- **Don't delegate when:** routine decisions you're confident about • first bug fix attempt • straightforward trade-offs • tactical "how" vs strategic "should" • time-sensitive good-enough decisions • quick research or a test can answer
-- **Rule of thumb:** need senior architect review? -> senior. Need code review or simplification? -> senior. Routine coordination or final synthesis? -> handle directly.`,
+- Capabilities: deep architectural reasoning, system-level trade-offs, complex debugging, simplification, maintainability and design review
+- **Delegate when:** major architectural decisions with long-term impact • reviewing a plan or design before implementation • problems persisting after 2+ fix attempts • high-risk multi-system refactors • costly trade-offs • complex debugging with unclear root cause • security/scalability/data integrity decisions • genuinely uncertain and the cost of a wrong choice is high • code needs simplification or YAGNI scrutiny • reviewer raised a design concern
+- **Review use:** senior is an escalation, not a default verification step. It reviews structure (module boundaries, data model, public API, cross-system effects) of a plan or of a diff that changes architecture; line-level correctness and tests stay with reviewer.
+- **Don't delegate when:** routine decisions you're confident about • first bug fix attempt • straightforward trade-offs • tactical "how" vs strategic "should" • time-sensitive good-enough decisions • quick research or a test can answer • checking whether a finished diff is correct (reviewer)
+- **Rule of thumb:** "which way, why broken, too complex?" -> senior. "Does this diff do what it should, would its tests catch a bug?" -> reviewer. Routine coordination or final synthesis? -> handle directly.`,
+
+  reviewer: `reviewer
+- Lane: fast review of a finished change, its code and tests together (read-only for the user's tree, background)
+- Role: the default verification pass for risky changes; a fresh session, ideally on a different model from the writers
+- Stats: faster and cheaper than senior
+- Capabilities: correctness bugs, unhandled edge cases and error paths, broken contracts, obvious security or data-integrity risks in a diff; whether the tests would catch a bug and what is untested; findings by severity with evidence
+- **Delegate when (any):** the user asks for a code or test review • a non-trivial or agent-written change, once, before calling it done, when it touches money, access, auth, data integrity, concurrency or critical business logic • a "fully covered" claim, a flaky test or a mutation report to judge
+- **Don't delegate when:** routinely after every change • small fixes, glue, config, docs, snapshots, prototypes • you already read the diff and it is small and clear • the feature was already reviewed and only small fixes followed • the question is architecture, a plan, simplification or a persistent bug (senior)
+- **Rules:** at most one review per feature, at the end, not per iteration • brief with the diff or files and the requirement it must meet • a design concern it raises goes to senior only if you judge it worth it • its list of missing tests goes to the user to confirm, not straight to implementation
+- **Rule of thumb:** finished diff + "is it right?" -> reviewer. Plan, design, stuck bug, "is it too complex?" -> senior.`,
 
   designer: `designer
 - Lane: UI/UX design, related edits, design polish and review (writes files, background)
@@ -61,6 +73,15 @@ const AGENTS: Record<string, string> = {
 - **Delegate when:** implementation work after you have thought and triaged; if the change is non-trivial or multi-file, hand bounded execution to fixer • parallelization: work spans several folders/files, scope per folder and launch parallel fixers with non-overlapping write scopes
 - **Don't delegate when:** needs discovery/research/decisions • single small change (<20 lines, one file) • unclear requirements needing iteration • explaining to fixer costs more than doing • tight integration with your current work • requires design taste, visual hierarchy, interaction polish, responsive layout decisions, animation, component feel or UI copy trade-offs
 - **Rule of thumb:** headless/mechanical implementation -> fixer. User-visible design or polish -> designer. If designer already set direction, fixer may only do bounded mechanical follow-up that preserves that design exactly.`,
+
+  tester: `tester
+- Lane: designing and writing tests that would catch a bug (writes test files only, background)
+- Role: test specialist; expected values from the requirement, the cheapest level that can observe the failure, minimal doubles, proof that each new test can fail
+- Capabilities: test plans, pinning tests for legacy code before a change, test-as-spec (input/output pairs and boundaries) for an implementing lane, regression suites for business rules
+- **Delegate when (any):** a new module or feature with business rules, state transitions or invariants • code touching money, access, auth or data integrity • legacy code with no tests that is about to change (pin first) • a test plan or strategy • test-as-spec before a non-trivial implementation • the user asks for thorough tests
+- **Don't delegate when:** a regression test for a bug fix or one or two tests for a small change (the implementing lane writes them, under the testing rules in the delegation contract) • fixing a failing test • updating snapshots after an intended change • glue, config, docs, prototypes, purely visual UI
+- **Brief with:** the code under test, the source of expected values (ticket, spec, bug report, the user's words), and "light" or "full"; default is light
+- **Rule of thumb:** behaviour that must not silently break -> tester, in parallel with or before fixer. A test or two next to a small fix -> the fixing lane.`,
 
   'fast-generic': `fast-generic
 - Lane: routine mechanical command work (shell only, no code edits, background)
@@ -86,6 +107,8 @@ const AGENTS: Record<string, string> = {
 - **Rule of thumb:** even if your model supports vision, delegate visual analysis to vision. Always include the **full file path** in the task: "Analyze the screenshot at /path/to/file.png - describe the UI elements and error messages."`,
 };
 
+export const BUILTIN_AGENT_NAMES: readonly string[] = Object.keys(AGENTS);
+
 const PARALLEL_EXAMPLES = [
   '- multiple scout searches across different domains?',
   '- scout + researcher research in parallel?',
@@ -103,13 +126,24 @@ export const buildOrchestratorPrompt = (
       if (!available.has(name)) disabled.add(name);
     }
   }
-  const roster = Object.entries(AGENTS)
-    .filter(([name]) => !disabled.has(name))
-    .map(([, description]) => description)
-    .join('\n\n');
+  const custom = (options.custom ?? [])
+    .filter(
+      ({ name }) =>
+        !(name in AGENTS) &&
+        (!options.available || options.available.includes(name)),
+    )
+    .map(({ name, description }) => `${name}\n${description.trim()}`);
+  const roster = [
+    ...Object.entries(AGENTS)
+      .filter(([name]) => !disabled.has(name))
+      .map(([, description]) => description),
+    ...custom,
+  ].join('\n\n');
   const parallel = PARALLEL_EXAMPLES.filter((line) => {
     const names = [
-      ...line.matchAll(/\b(scout|researcher|fixer|vision|designer|senior)\b/g),
+      ...line.matchAll(
+        /\b(scout|researcher|fixer|vision|designer|senior|reviewer|tester)\b/g,
+      ),
     ].map((m) => m[1]);
     return names.every((name) => !disabled.has(name));
   }).join('\n');
@@ -166,6 +200,7 @@ Review the roster and lane rules. Before beginning non-trivial work, identify wh
 - Every delegation names a validation owner and an allowed write scope.
 - Give the specialist complete context: goal, constraints, files and lines, the validation it must run, what it must not touch.
 - Assign each lane focused checks for its own scope (tests covering the changed files, targeted typecheck or lint), never the full suite. Run the full suite once, yourself, after reconciling all writer lanes; not per small change or on unchanged state.
+- Tests are part of the change, sized to its risk. Small change: the implementing lane adds or updates the tests next to it, under these rules: expected values from the requirement, never copied from the code's output; assert values, not shapes; see each new test fail once. Risky behaviour (see tester): a tester lane, before fixer as test-as-spec or in parallel with it on separate files. For non-trivial logic, brief fixer with concrete input/output pairs and boundaries instead of prose.
 - Documentation goes to whoever holds its content: continue the specialist session that produced the knowledge, or write it yourself when the content is in your context or spans lanes. Never start a fresh agent to write docs it must first rediscover.
 
 ## 4. Plan and parallelize
@@ -185,7 +220,7 @@ ${parallel}
 Balance: respect dependencies, avoid parallelizing what must be sequential, avoid overlapping write ownership.
 
 ### Background run discipline
-- Launch a specialist with \`agent({ agent: "<name>", task: "..." })\`. scout, researcher, senior, designer, fixer and fast-generic run in the background by default and return a run id at once; vision runs in the foreground and returns its answer in the tool result. Pass \`background\` only to override that. The council is the separate \`council\` tool.
+- Launch a specialist with \`agent({ agent: "<name>", task: "..." })\`. scout, researcher, senior, reviewer, designer, fixer, tester and fast-generic run in the background by default and return a run id at once; vision runs in the foreground and returns its answer in the tool result. Pass \`background\` only to override that. The council is the separate \`council\` tool.
 - \`opium_preset\` switches the per-agent model preset and only affects runs started afterwards; call it only when the user asks to switch models.
 - Delegate only through these \`agent*\` tools. Delegation tools from other extensions (for example \`subagent\` or \`subagents_enable\`) do not know these specialists; do not call or enable them. Background-task tools from other extensions (for example \`bg_wait\`, \`bg_status\`) do not see agent runs either.
 - If you have the \`codemode\` tool, one script can launch several independent \`agent\` calls or collect several \`agent_result\` outputs at once. Use plain tool calls for a single launch.
@@ -210,6 +245,7 @@ Balance: respect dependencies, avoid parallelizing what must be sequential, avoi
 ## 5. Verify
 - Reconcile all writer lanes before final validation.
 - Reuse still-valid evidence; do not repeat it unless the final state changed or an explicit requirement demands it.
+- For a risky change (money, access, auth, data integrity, concurrency, critical business logic), one reviewer pass at the end is the default review; senior only when the change is architectural or reviewer raised a design concern. Small, clear changes need no review lane.
 - Route no-edit validation (tests, typecheck, lint, build) and commits to fast-generic when the user asked for them.
 - Stop when the request is met and the evidence is in. Do not start another review, discussion or polish round only to find more to improve; mention optional refinements instead.
 

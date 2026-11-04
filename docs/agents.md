@@ -2,7 +2,7 @@
 
 Your Pi session is the lead. It reads your request, splits it into parts
 and hands each part to the agent that fits, often several at once. You
-can also name one: "ask senior to review this", "let fixer do it". Back
+can also name one: "ask reviewer to review this", "let fixer do it". Back
 to the [README](../README.md).
 
 Agents that run in the background return right away; their reports come
@@ -22,9 +22,26 @@ CLI (`ctx7`) and uses the grep.app MCP server when you have it. Its shell
 only runs `ctx7 library` and `ctx7 docs`; it cannot change files. Background, `low`, 15 minutes.
 
 **senior** is for decisions that are expensive to get wrong: architecture,
-a bug that survived two fixes, risky refactors, code review,
-simplification. It advises and does not edit. Background, `xhigh`, 20
-minutes, with the `simplify` skill.
+a bug that survived two fixes, risky refactors, design review,
+simplification. It advises and does not edit. Whether a finished diff is
+correct is reviewer's job, not senior's. Background, `xhigh`, 20 minutes,
+with the `simplify` skill.
+
+**reviewer** checks a finished change for correctness, and checks its
+tests too: would they fail if the code were wrong? Light by default
+(reads and runs checks); a deep review also tries to break the code in a
+separate git worktree, never in yours. It reports findings and does not
+edit your files. Background, `medium`, 30 minutes.
+
+**tester** writes tests that would catch a bug, sized to the risk of the
+change: the test is a spec of the behavior, not a copy of the code. It
+edits test files and runs them. Background, `high`, 1 hour.
+
+tester and reviewer ship with the bundled `write-tests` and
+`review-tests` skills (from the [mtga](https://github.com/akholod/mtga)
+project, MIT). To replace or drop them, set `skills` for the agent in
+`opium.json`. Because the package exposes `./skills` to Pi, both skills
+are also available in your main session.
 
 **designer** builds and polishes what users see: layout, spacing,
 hierarchy, motion, responsive behavior. It edits files. Weak at copy, so
@@ -57,9 +74,13 @@ where they agree and differ. Use it for high-stakes calls, or run
 | senior       |   ✓   |             |       |     |
 | designer     |   ✓   |      ✓      |   ✓   |     |
 | fixer        |   ✓   |      ✓      |   ✓   |     |
+| reviewer     |   ✓   |     (✓)     |   ✓   |     |
+| tester       |   ✓   |      ✓      |   ✓   |     |
 | fast-generic |   ✓   |             |   ✓   |     |
 | vision       |   ✓   |             |       |     |
 | councillors  |   ✓   |             |       |     |
+
+(✓) reviewer writes only temporary breaks, in a separate git worktree.
 
 researcher and senior also have Pi's `codemode` tool: a small
 script that calls their other tools in parallel and filters large output.

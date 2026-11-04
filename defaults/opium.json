@@ -78,6 +78,24 @@
       "idleTimeoutMs": 600000,
       "wrapUpMs": 180000,
       "mcpServers": ["codegraph"]
+    },
+    "reviewer": {
+      "thinking": "medium",
+      "skills": ["review-tests"],
+      "background": true,
+      "timeoutMs": 1800000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000,
+      "mcpServers": ["codegraph"]
+    },
+    "tester": {
+      "thinking": "high",
+      "skills": ["write-tests"],
+      "background": true,
+      "timeoutMs": 3600000,
+      "idleTimeoutMs": 600000,
+      "wrapUpMs": 180000,
+      "mcpServers": ["codegraph"]
     }
   }
 }

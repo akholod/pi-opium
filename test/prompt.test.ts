@@ -15,6 +15,41 @@ test('orchestrator prompt weighs delegation cost and values productivity', () =>
   assert.match(prompt, /Never handle UI\/design work directly/);
 });
 
+test('roster lists reviewer and tester; senior is not a code reviewer', () => {
+  const prompt = buildOrchestratorPrompt();
+  assert.match(prompt, /^reviewer$/m);
+  assert.match(prompt, /^tester$/m);
+  const senior = prompt.match(/^senior\n[\s\S]*?(?=\n\n)/m)?.[0] ?? '';
+  assert.ok(senior.length > 0);
+  assert.doesNotMatch(senior, /code reviewer/i);
+});
+
+test('custom agents are listed after the built-ins', () => {
+  const prompt = buildOrchestratorPrompt({
+    available: ['scout', 'linter'],
+    custom: [{ name: 'linter', description: '  Reviews diffs.\n' }],
+  });
+  assert.match(prompt, /\n\nlinter\nReviews diffs\.\n\n<\/Agents>/);
+  assert.ok(prompt.indexOf('\nscout\n') < prompt.indexOf('\nlinter\n'));
+});
+
+test('a custom agent named like a built-in is not duplicated', () => {
+  const prompt = buildOrchestratorPrompt({
+    available: ['scout'],
+    custom: [{ name: 'scout', description: 'Impostor.' }],
+  });
+  assert.doesNotMatch(prompt, /Impostor/);
+  assert.equal(prompt.match(/^scout$/gm)?.length, 1);
+});
+
+test('a custom agent that is not available is left out', () => {
+  const prompt = buildOrchestratorPrompt({
+    available: ['scout'],
+    custom: [{ name: 'linter', description: 'Reviews diffs.' }],
+  });
+  assert.doesNotMatch(prompt, /Reviews diffs/);
+});
+
 test('deepwork skill orders phases by fidelity and defers polish', () => {
   const skill = readFileSync(
     new URL('../skills/deepwork/SKILL.md', import.meta.url),

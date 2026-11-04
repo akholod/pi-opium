@@ -70,16 +70,21 @@ it's done.
 
 ## The team
 
-| Agent        | Does                                             |
-| ------------ | ------------------------------------------------ |
-| scout        | finds files and code, fast                       |
-| researcher   | reads docs and the web, answers with sources     |
-| senior       | architecture, hard bugs, code review             |
-| designer     | UI and UX, built and polished                    |
-| fixer        | writes the code for a clear, bounded task        |
-| fast-generic | git, commits, tests, builds                      |
-| vision       | images for models that can't see them            |
-| council      | three models answer, one sums up where they land |
+| Agent        | Does                                                   |
+| ------------ | ------------------------------------------------------ |
+| scout        | finds files and code, fast                             |
+| researcher   | reads docs and the web, answers with sources           |
+| senior       | architecture, hard bugs, design review, simplification |
+| designer     | UI and UX, built and polished                          |
+| fixer        | writes the code for a clear, bounded task              |
+| reviewer     | fast review of a finished change: code and its tests   |
+| tester       | writes tests that would catch a bug                    |
+| fast-generic | git, commits, tests, builds                            |
+| vision       | images for models that can't see them                  |
+| council      | three models answer, one sums up where they land       |
+
+tester and reviewer come with two bundled skills, `write-tests` and
+`review-tests`.
 
 ## Handy commands
 

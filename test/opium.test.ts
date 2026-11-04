@@ -69,6 +69,8 @@ test('orchestrator prompt lists the roster and drops disabled agents', () => {
     'designer',
     'fixer',
     'fast-generic',
+    'reviewer',
+    'tester',
     'council',
     'vision',
   ]) {

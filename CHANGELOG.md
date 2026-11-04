@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Bundled skills `write-tests` and `review-tests` (vendored from mtga, MIT;
+  refresh with `npm run sync:skills`); tester and reviewer load them by
+  default.
+- **reviewer agent.** The default verification for risky changes: reviews
+  the code and its tests. Light by default (reads, runs checks); a deep
+  review also tries to break the code in a separate git worktree.
+- **tester agent.** Writes tests sized to the risk of the change, treating
+  each test as a spec of the behavior. Light or full.
+- **senior narrowed** to architecture, design and stuck bugs; reviewing a
+  finished diff is now reviewer's job.
+- Orchestrator prompt: tests are part of the change, sized to risk.
+- Custom agents with `advertise: true` in `~/.pi/agent/agents` appear in
+  the orchestrator roster with their description.
+- Inlined skills carry their path, so relative references inside a skill
+  resolve.
+
 ## 0.5.0
 
 - **researcher and senior get Pi's `codemode` tool.** With it they

@@ -2,6 +2,7 @@
 // skills inlined, tool allowlist (plus MCP tool names), extensions, limits.
 
 import { readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   DefaultPackageManager,
   type ExtensionFactory,
@@ -227,7 +228,11 @@ export const buildLaunch = (
       continue;
     }
     const body = skill.content.trim();
-    systemPrompt += `\n\n<skill name="${name}">\n${body}\n</skill>`;
+    const dir = dirname(skill.path);
+    const base = `Relative paths in this skill resolve against ${dir}.`;
+    systemPrompt +=
+      `\n\n<skill name="${name}" path="${skill.path}">\n` +
+      `${base}\n${body}\n</skill>`;
   }
 
   // Per server: Pi's built-in MCP when it has the server, else the

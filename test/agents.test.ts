@@ -45,7 +45,7 @@ test('every repo agent file loads', () => {
     assert.ok(agent, name);
     return agent;
   };
-  assert.equal(agents.size, 11);
+  assert.equal(agents.size, 13);
   const scout = get('scout');
   assert.deepEqual(scout.mcpServers, []);
   assert.deepEqual(scout.packages, []);
@@ -76,12 +76,22 @@ test('an agent with no opium.json entry gets the built-in fallbacks', () => {
   }
 });
 
+test('every skill named in defaults/opium.json is bundled', () => {
+  const { overrides } = readAgentOverrides(defaultsFile);
+  for (const [name, override] of Object.entries(overrides)) {
+    for (const skill of override.skills ?? []) {
+      const file = join(root, 'skills', skill, 'SKILL.md');
+      assert.ok(existsSync(file), `${name}: skill ${skill}`);
+    }
+  }
+});
+
 test('defaults/opium.json parses; every agent inherits the model', () => {
   const { overrides, errors } = readAgentOverrides(defaultsFile);
   assert.deepEqual(errors, []);
   const names = [...loadAgents({ dirs: [agentsDir] }).agents.keys()];
   assert.deepEqual(Object.keys(overrides).sort(), names.sort());
-  assert.equal(names.length, 11);
+  assert.equal(names.length, 13);
   for (const [name, override] of Object.entries(overrides)) {
     assert.equal(override.model, undefined, name);
     assert.equal(override.fallbackModels, undefined, name);
@@ -91,6 +101,8 @@ test('defaults/opium.json parses; every agent inherits the model', () => {
       scout: ['codegraph'],
       fixer: ['codegraph'],
       senior: ['codegraph'],
+      reviewer: ['codegraph'],
+      tester: ['codegraph'],
       researcher: ['gh_grep'],
     };
     assert.deepEqual(override.mcpServers, expected[name], name);
@@ -118,6 +130,12 @@ test('defaults/opium.json parses; every agent inherits the model', () => {
   assert.equal(get('fixer').timeoutMs, 7200000);
   assert.deepEqual(get('senior').skills, ['simplify']);
   assert.equal(get('senior').thinking, 'xhigh');
+  assert.deepEqual(get('reviewer').skills, ['review-tests']);
+  assert.deepEqual(get('tester').skills, ['write-tests']);
+  assert.equal(get('reviewer').thinking, 'medium');
+  assert.equal(get('tester').thinking, 'high');
+  assert.equal(get('reviewer').timeoutMs, 1800000);
+  assert.equal(get('tester').timeoutMs, 3600000);
   assert.equal(get('vision').background, false);
   for (const name of [
     'council',
